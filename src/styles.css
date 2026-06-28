@@ -552,6 +552,31 @@ button {
   font-weight: 820;
 }
 
+.auth-notice.error {
+  border-color: #ffd4d4;
+  background: #fff7f7;
+  color: #9f1d1d;
+}
+
+.auth-switch {
+  display: flex;
+  width: min(100%, 520px);
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: #737b87;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.auth-switch button {
+  border: 0;
+  background: transparent;
+  color: var(--blue);
+  font: inherit;
+  cursor: pointer;
+}
+
 .auth-terms {
   max-width: 520px;
   color: #9aa1ad !important;

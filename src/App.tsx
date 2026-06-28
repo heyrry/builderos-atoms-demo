@@ -89,11 +89,25 @@ type GeneratedApp = {
 };
 
 type WorkspaceProfile = {
+  id?: number;
   name: string;
   email: string;
   goal: string;
   credits: number;
   registeredAt?: string;
+};
+
+type AuthPayload = {
+  name?: string;
+  email: string;
+  password: string;
+  goal?: string;
+};
+
+type AuthResponse = {
+  user: WorkspaceProfile;
+  token: string;
+  storage: "mysql" | "json";
 };
 
 type RunRecord = {
@@ -127,6 +141,7 @@ type PlatformStatus = {
     knowledgeSources: number;
     runRecords: number;
     updatedAt: string;
+    authStore?: "mysql" | "json";
   };
   services: Array<{
     name: string;
@@ -197,6 +212,7 @@ const initialPrompt = "请描述你要构建的产品、页面、数据、连接
 const candidateName = "BuilderOS";
 const storageKey = "atoms-demo-builderos-projects-v2";
 const profileKey = "atoms-demo-builderos-profile-v2";
+const authTokenKey = "atoms-demo-builderos-auth-token-v1";
 const knowledgeKey = "atoms-demo-builderos-knowledge-v2";
 const defaultProfile: WorkspaceProfile = {
   name: "",
@@ -267,7 +283,14 @@ async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
     ...options,
   });
   if (!response.ok) {
-    throw new Error(`API ${response.status}`);
+    let message = `API ${response.status}`;
+    try {
+      const payload = (await response.json()) as { message?: string; error?: string };
+      message = payload.message || payload.error || message;
+    } catch {
+      // Keep the status fallback when the server returns a non-JSON error.
+    }
+    throw new Error(message);
   }
   return (await response.json()) as T;
 }
@@ -545,8 +568,11 @@ document.querySelector(".primary").addEventListener("click", () => {
 function App() {
   const [activeSection, setActiveSection] = useState<Section>("home");
   const [profile, setProfile] = usePersistentState<WorkspaceProfile>(profileKey, defaultProfile);
+  const [authToken, setAuthToken] = usePersistentState<string | null>(authTokenKey, null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [authIntent, setAuthIntent] = useState<AuthIntent | null>(null);
+  const [authError, setAuthError] = useState("");
+  const [authLoading, setAuthLoading] = useState(false);
   const [startAfterSignup, setStartAfterSignup] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workMode, setWorkMode] = useState<WorkMode>("build");
@@ -575,7 +601,7 @@ function App() {
   );
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
-  const registrationRequired = !profile.registeredAt;
+  const registrationRequired = !(authToken && profile.registeredAt);
   const displayName = profile.name.trim() || "Builder";
 
   const activeAgents = useMemo(() => {
@@ -591,6 +617,40 @@ function App() {
   useEffect(() => {
     document.title = candidateName;
   }, []);
+
+  useEffect(() => {
+    if (!authToken && profile.registeredAt) {
+      setProfile(defaultProfile);
+    }
+  }, [authToken, profile.registeredAt, setProfile]);
+
+  useEffect(() => {
+    if (!authToken) {
+      return;
+    }
+    let ignore = false;
+
+    apiRequest<{ user: WorkspaceProfile; storage: "mysql" | "json" }>("/api/auth/me", {
+      headers: { Authorization: `Bearer ${authToken}` },
+    })
+      .then((result) => {
+        if (!ignore) {
+          setProfile(result.user);
+          setServerStatus("synced");
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setAuthToken(null);
+          setProfile(defaultProfile);
+          setWorkspaceOpen(false);
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [authToken, setAuthToken, setProfile]);
 
   useEffect(() => {
     let ignore = false;
@@ -827,18 +887,46 @@ function App() {
 
     setStartAfterSignup(shouldStartAfterSignup);
     setAuthIntent("signup");
+    setAuthError("");
+  }
+
+  async function authenticate(intent: AuthIntent, payload: AuthPayload) {
+    setAuthLoading(true);
+    setAuthError("");
+    try {
+      const result = await apiRequest<AuthResponse>(intent === "signup" ? "/api/auth/register" : "/api/auth/login", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      setAuthToken(result.token);
+      setProfile(result.user);
+      setWorkspaceOpen(true);
+      setAuthIntent(null);
+      setOnboardingOpen(false);
+
+      if (startAfterSignup) {
+        setStartAfterSignup(false);
+        window.setTimeout(() => startBuild(prompt), 0);
+      }
+    } catch (error) {
+      setAuthError(error instanceof Error ? error.message : "认证失败，请稍后再试。");
+    } finally {
+      setAuthLoading(false);
+    }
   }
 
   function saveProfile(nextProfile: WorkspaceProfile) {
-    setProfile({ ...nextProfile, registeredAt: nextProfile.registeredAt || new Date().toISOString() });
+    setProfile({
+      ...profile,
+      name: nextProfile.name.trim(),
+      email: profile.email,
+      goal: nextProfile.goal,
+      credits: nextProfile.credits,
+      registeredAt: profile.registeredAt,
+    });
     setWorkspaceOpen(true);
     setAuthIntent(null);
     setOnboardingOpen(false);
-
-    if (startAfterSignup) {
-      setStartAfterSignup(false);
-      window.setTimeout(() => startBuild(prompt), 0);
-    }
   }
 
   if (!workspaceOpen) {
@@ -847,21 +935,24 @@ function App() {
         <AuthPage
           intent={authIntent}
           profile={profile}
-          registered={!registrationRequired}
           onBack={() => {
             setStartAfterSignup(false);
             setAuthIntent(null);
+            setAuthError("");
           }}
           onCreate={() => {
             setStartAfterSignup(false);
+            setAuthError("");
             setAuthIntent("signup");
           }}
-          onEnter={() => {
-            setWorkspaceOpen(true);
-            setAuthIntent(null);
-            setOnboardingOpen(false);
+          onLogin={() => {
+            setStartAfterSignup(false);
+            setAuthError("");
+            setAuthIntent("login");
           }}
-          onSave={saveProfile}
+          onSubmit={authenticate}
+          error={authError}
+          loading={authLoading}
         />
       );
     }
@@ -871,7 +962,12 @@ function App() {
         activeAgents={agents}
         prompt={prompt}
         onLogin={() => {
+          if (!registrationRequired) {
+            setWorkspaceOpen(true);
+            return;
+          }
           setStartAfterSignup(false);
+          setAuthError("");
           setAuthIntent("login");
         }}
         onPromptChange={setPrompt}
@@ -1250,46 +1346,39 @@ function PublicLanding({
 type AuthPageProps = {
   intent: AuthIntent;
   profile: WorkspaceProfile;
-  registered: boolean;
   onBack: () => void;
   onCreate: () => void;
-  onEnter: () => void;
-  onSave: (profile: WorkspaceProfile) => void;
+  onLogin: () => void;
+  onSubmit: (intent: AuthIntent, payload: AuthPayload) => Promise<void>;
+  error: string;
+  loading: boolean;
 };
 
-function AuthPage({ intent, profile, registered, onBack, onCreate, onEnter, onSave }: AuthPageProps) {
-  const [draft, setDraft] = useState<WorkspaceProfile>({
-    ...defaultProfile,
-    ...profile,
-    name: profile.name || "",
+function AuthPage({ intent, profile, onBack, onCreate, onLogin, onSubmit, error, loading }: AuthPageProps) {
+  const [draft, setDraft] = useState<AuthPayload>({
+    name: intent === "signup" ? profile.name || "" : "",
     email: profile.email || "",
+    password: "",
     goal: profile.goal || defaultProfile.goal,
   });
   const emailPattern = /\S+@\S+\.\S+/;
   const normalizedEmail = draft.email.trim().toLowerCase();
-  const storedEmail = profile.email.trim().toLowerCase();
-  const canCreate = draft.name.trim().length >= 2 && emailPattern.test(draft.email.trim());
-  const canLogin = registered && emailPattern.test(draft.email.trim()) && normalizedEmail === storedEmail;
+  const canCreate =
+    (draft.name || "").trim().length >= 2 && emailPattern.test(normalizedEmail) && draft.password.length >= 6;
+  const canLogin = emailPattern.test(normalizedEmail) && draft.password.length >= 6;
   const canSubmit = intent === "signup" ? canCreate : canLogin;
-  const loginBlocked = intent === "login" && !registered;
-  const loginMismatch = intent === "login" && registered && normalizedEmail.length > 0 && normalizedEmail !== storedEmail;
   const title = intent === "login" ? "登录 BuilderOS" : "创建 BuilderOS 工作区";
 
   function submit() {
-    if (!canSubmit) {
+    if (!canSubmit || loading) {
       return;
     }
 
-    if (intent === "login") {
-      onEnter();
-      return;
-    }
-
-    onSave({
+    void onSubmit(intent, {
       ...draft,
-      name: draft.name.trim(),
-      email: draft.email.trim(),
-      credits: draft.credits || 70,
+      name: draft.name?.trim(),
+      email: normalizedEmail,
+      goal: draft.goal || defaultProfile.goal,
     });
   }
 
@@ -1314,17 +1403,17 @@ function AuthPage({ intent, profile, registered, onBack, onCreate, onEnter, onSa
         <button
           className="google-auth"
           type="button"
-          disabled={loginBlocked}
           onClick={() =>
             setDraft((value) => ({
               ...value,
-              name: value.name || profile.name || "Builder Team",
-              email: value.email || profile.email || "builder@example.com",
+              name: value.name || "he0yan BuilderOS",
+              email: value.email || "he0yan@builderos.demo",
+              password: value.password || "builderos2026",
             }))
           }
         >
           <Globe2 size={18} />
-          使用 Google 继续
+          填充演示账号
         </button>
 
         <div className="auth-separator">
@@ -1337,7 +1426,7 @@ function AuthPage({ intent, profile, registered, onBack, onCreate, onEnter, onSa
           <label>
             工作区名称
             <input
-              value={draft.name}
+              value={draft.name || ""}
               placeholder="输入你的名字或团队名"
               onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
             />
@@ -1351,24 +1440,31 @@ function AuthPage({ intent, profile, registered, onBack, onCreate, onEnter, onSa
             onChange={(event) => setDraft((value) => ({ ...value, email: event.target.value }))}
           />
         </label>
+        <label>
+          密码
+          <input
+            type="password"
+            value={draft.password}
+            placeholder="至少 6 位，用于再次登录"
+            onChange={(event) => setDraft((value) => ({ ...value, password: event.target.value }))}
+          />
+        </label>
 
-        {loginBlocked && (
-          <div className="auth-notice" role="status">
-            当前浏览器还没有创建 BuilderOS 工作区，请先注册/创建工作区后再登录。
-            <button type="button" onClick={onCreate}>
-              先创建工作区
-            </button>
+        {error && (
+          <div className="auth-notice error" role="status">
+            {error}
           </div>
         )}
-        {loginMismatch && (
-          <div className="auth-notice" role="status">
-            这个邮箱没有匹配到当前工作区，请使用已注册邮箱：{profile.email}。
-          </div>
-        )}
+        <div className="auth-switch">
+          {intent === "login" ? "还没有工作区？" : "已经有工作区？"}
+          <button type="button" onClick={intent === "login" ? onCreate : onLogin}>
+            {intent === "login" ? "创建工作区" : "去登录"}
+          </button>
+        </div>
 
         <p className="auth-terms">继续即表示同意 BuilderOS 的服务条款与隐私政策。</p>
-        <button className="auth-submit" disabled={!canSubmit} onClick={submit}>
-          {intent === "login" ? "登录并进入" : "创建并进入"}
+        <button className="auth-submit" disabled={!canSubmit || loading} onClick={submit}>
+          {loading ? "处理中..." : intent === "login" ? "登录并进入" : "创建并进入"}
         </button>
       </section>
 

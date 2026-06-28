@@ -5,6 +5,7 @@ After=network.target
 [Service]
 Type=simple
 WorkingDirectory=/opt/builderos/current
+EnvironmentFile=-/etc/builderos-api.env
 Environment=PORT=4188
 Environment=DATA_DIR=/opt/builderos/data
 ExecStart=/usr/bin/node /opt/builderos/current/server/platform-server.mjs

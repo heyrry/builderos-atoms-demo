@@ -3,10 +3,16 @@ import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import path from "node:path";
 import process from "node:process";
+import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 
 const port = Number(process.env.PORT || 4188);
 const dataDir = process.env.DATA_DIR || path.resolve(process.cwd(), "data");
 const stateFile = path.join(dataDir, "state.json");
+const authFile = path.join(dataDir, "auth.json");
+const sessionTtlMs = 1000 * 60 * 60 * 24 * 7;
+const authStorageMode = process.env.MYSQL_HOST ? "mysql" : "json";
+let mysqlPoolPromise;
+let authSchemaReady = false;
 
 const defaultState = {
   projects: [],
@@ -99,6 +105,303 @@ async function writeState(nextState) {
   };
   await writeFile(stateFile, JSON.stringify(state, null, 2), "utf8");
   return state;
+}
+
+function createHttpError(statusCode, code, message) {
+  const error = new Error(message);
+  error.statusCode = statusCode;
+  error.code = code;
+  return error;
+}
+
+function normalizeEmail(value) {
+  return String(value || "").trim().toLowerCase();
+}
+
+function normalizeName(value) {
+  return String(value || "").trim().slice(0, 120);
+}
+
+function normalizeGoal(value) {
+  return String(value || "用 BuilderOS 构建一个 AI Native 应用").trim().slice(0, 1000);
+}
+
+function toMysqlDate(date) {
+  return date.toISOString().slice(0, 19).replace("T", " ");
+}
+
+function hashPassword(password) {
+  const salt = randomBytes(16).toString("hex");
+  const hash = scryptSync(password, salt, 64).toString("hex");
+  return `scrypt:${salt}:${hash}`;
+}
+
+function verifyPassword(password, storedHash) {
+  const [scheme, salt, hash] = String(storedHash || "").split(":");
+  if (scheme !== "scrypt" || !salt || !hash) {
+    return false;
+  }
+  const expected = Buffer.from(hash, "hex");
+  const actual = scryptSync(password, salt, expected.length);
+  return expected.length === actual.length && timingSafeEqual(expected, actual);
+}
+
+function hashToken(token) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
+function getBearerToken(request) {
+  const authorization = request.headers.authorization || "";
+  if (authorization.startsWith("Bearer ")) {
+    return authorization.slice(7).trim();
+  }
+  const headerToken = request.headers["x-builderos-token"];
+  return Array.isArray(headerToken) ? headerToken[0] : headerToken || "";
+}
+
+function validateAuthInput(body, mode) {
+  const name = normalizeName(body.name);
+  const email = normalizeEmail(body.email);
+  const password = String(body.password || "");
+  const goal = normalizeGoal(body.goal);
+
+  if (mode === "register" && name.length < 2) {
+    throw createHttpError(400, "invalid_name", "请输入至少 2 个字符的工作区名称。");
+  }
+  if (!/^\S+@\S+\.\S+$/.test(email)) {
+    throw createHttpError(400, "invalid_email", "请输入有效的邮箱地址。");
+  }
+  if (password.length < 6) {
+    throw createHttpError(400, "invalid_password", "密码至少需要 6 位。");
+  }
+
+  return { name, email, password, goal };
+}
+
+function publicUser(row) {
+  return {
+    id: Number(row.id),
+    name: row.name,
+    email: row.email,
+    goal: row.goal || "用 BuilderOS 构建一个 AI Native 应用",
+    credits: Number(row.credits ?? 70),
+    registeredAt: row.registered_at instanceof Date ? row.registered_at.toISOString() : new Date(row.registered_at).toISOString(),
+  };
+}
+
+async function readAuthState() {
+  await mkdir(dataDir, { recursive: true });
+  if (!existsSync(authFile)) {
+    await writeFile(authFile, JSON.stringify({ users: [], sessions: [] }, null, 2), "utf8");
+  }
+  try {
+    const raw = await readFile(authFile, "utf8");
+    const state = JSON.parse(raw);
+    return {
+      users: Array.isArray(state.users) ? state.users : [],
+      sessions: Array.isArray(state.sessions) ? state.sessions : [],
+    };
+  } catch {
+    return { users: [], sessions: [] };
+  }
+}
+
+async function writeAuthState(nextState) {
+  await mkdir(dataDir, { recursive: true });
+  await writeFile(authFile, JSON.stringify(nextState, null, 2), "utf8");
+  return nextState;
+}
+
+async function getMysqlPool() {
+  if (authStorageMode !== "mysql") {
+    return null;
+  }
+  if (!mysqlPoolPromise) {
+    mysqlPoolPromise = import("mysql2/promise").then(({ createPool }) =>
+      createPool({
+        host: process.env.MYSQL_HOST || "127.0.0.1",
+        port: Number(process.env.MYSQL_PORT || 3306),
+        user: process.env.MYSQL_USER,
+        password: process.env.MYSQL_PASSWORD,
+        database: process.env.MYSQL_DATABASE || "builderos",
+        waitForConnections: true,
+        connectionLimit: 5,
+        charset: "utf8mb4",
+      }),
+    );
+  }
+  const pool = await mysqlPoolPromise;
+  if (!authSchemaReady) {
+    await ensureAuthSchema(pool);
+    authSchemaReady = true;
+  }
+  return pool;
+}
+
+async function ensureAuthSchema(pool) {
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS builderos_users (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      name VARCHAR(120) NOT NULL,
+      email VARCHAR(190) NOT NULL,
+      password_hash VARCHAR(255) NOT NULL,
+      goal TEXT NULL,
+      credits INT NOT NULL DEFAULT 70,
+      registered_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      last_login_at DATETIME(3) NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_builderos_users_email (email)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+  await pool.execute(`
+    CREATE TABLE IF NOT EXISTS builderos_sessions (
+      id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+      user_id BIGINT UNSIGNED NOT NULL,
+      token_hash CHAR(64) NOT NULL,
+      expires_at DATETIME(3) NOT NULL,
+      created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+      PRIMARY KEY (id),
+      UNIQUE KEY uq_builderos_sessions_token (token_hash),
+      KEY idx_builderos_sessions_user (user_id),
+      CONSTRAINT fk_builderos_sessions_user
+        FOREIGN KEY (user_id) REFERENCES builderos_users(id)
+        ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
+  `);
+}
+
+async function createMysqlSession(pool, userId) {
+  const token = randomBytes(32).toString("base64url");
+  await pool.execute("INSERT INTO builderos_sessions (user_id, token_hash, expires_at) VALUES (?, ?, ?)", [
+    userId,
+    hashToken(token),
+    toMysqlDate(new Date(Date.now() + sessionTtlMs)),
+  ]);
+  return token;
+}
+
+async function registerUser(body) {
+  const input = validateAuthInput(body, "register");
+  const passwordHash = hashPassword(input.password);
+  const pool = await getMysqlPool();
+
+  if (pool) {
+    try {
+      await pool.execute(
+        "INSERT INTO builderos_users (name, email, password_hash, goal, credits) VALUES (?, ?, ?, ?, 70)",
+        [input.name, input.email, passwordHash, input.goal],
+      );
+    } catch (error) {
+      if (error && error.code === "ER_DUP_ENTRY") {
+        throw createHttpError(409, "email_exists", "该邮箱已注册，请直接登录。");
+      }
+      throw error;
+    }
+
+    const [rows] = await pool.execute(
+      "SELECT id, name, email, goal, credits, registered_at FROM builderos_users WHERE email = ? LIMIT 1",
+      [input.email],
+    );
+    const user = publicUser(rows[0]);
+    const token = await createMysqlSession(pool, user.id);
+    return { user, token, storage: "mysql" };
+  }
+
+  const state = await readAuthState();
+  if (state.users.some((user) => user.email === input.email)) {
+    throw createHttpError(409, "email_exists", "该邮箱已注册，请直接登录。");
+  }
+  const user = {
+    id: Date.now(),
+    name: input.name,
+    email: input.email,
+    password_hash: passwordHash,
+    goal: input.goal,
+    credits: 70,
+    registered_at: new Date().toISOString(),
+  };
+  const token = randomBytes(32).toString("base64url");
+  const session = {
+    userId: user.id,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
+  };
+  await writeAuthState({ users: [user, ...state.users], sessions: [session, ...state.sessions] });
+  return { user: publicUser(user), token, storage: "json" };
+}
+
+async function loginUser(body) {
+  const input = validateAuthInput({ ...body, name: "login" }, "login");
+  const pool = await getMysqlPool();
+
+  if (pool) {
+    const [rows] = await pool.execute(
+      "SELECT id, name, email, password_hash, goal, credits, registered_at FROM builderos_users WHERE email = ? LIMIT 1",
+      [input.email],
+    );
+    const row = rows[0];
+    if (!row || !verifyPassword(input.password, row.password_hash)) {
+      throw createHttpError(401, "invalid_credentials", "邮箱或密码不正确，请先注册或检查输入。");
+    }
+    await pool.execute("UPDATE builderos_users SET last_login_at = ? WHERE id = ?", [
+      toMysqlDate(new Date()),
+      row.id,
+    ]);
+    const user = publicUser(row);
+    const token = await createMysqlSession(pool, user.id);
+    return { user, token, storage: "mysql" };
+  }
+
+  const state = await readAuthState();
+  const row = state.users.find((user) => user.email === input.email);
+  if (!row || !verifyPassword(input.password, row.password_hash)) {
+    throw createHttpError(401, "invalid_credentials", "邮箱或密码不正确，请先注册或检查输入。");
+  }
+  const token = randomBytes(32).toString("base64url");
+  const session = {
+    userId: row.id,
+    tokenHash: hashToken(token),
+    expiresAt: new Date(Date.now() + sessionTtlMs).toISOString(),
+  };
+  await writeAuthState({ users: state.users, sessions: [session, ...state.sessions] });
+  return { user: publicUser(row), token, storage: "json" };
+}
+
+async function getCurrentUser(request) {
+  const token = getBearerToken(request);
+  if (!token) {
+    throw createHttpError(401, "missing_token", "请先登录。");
+  }
+  const tokenHash = hashToken(token);
+  const pool = await getMysqlPool();
+
+  if (pool) {
+    const [rows] = await pool.execute(
+      `SELECT u.id, u.name, u.email, u.goal, u.credits, u.registered_at
+       FROM builderos_sessions s
+       JOIN builderos_users u ON u.id = s.user_id
+       WHERE s.token_hash = ? AND s.expires_at > ?
+       LIMIT 1`,
+      [tokenHash, toMysqlDate(new Date())],
+    );
+    if (!rows[0]) {
+      throw createHttpError(401, "invalid_token", "登录已失效，请重新登录。");
+    }
+    return { user: publicUser(rows[0]), storage: "mysql" };
+  }
+
+  const state = await readAuthState();
+  const session = state.sessions.find((item) => item.tokenHash === tokenHash && new Date(item.expiresAt).getTime() > Date.now());
+  if (!session) {
+    throw createHttpError(401, "invalid_token", "登录已失效，请重新登录。");
+  }
+  const user = state.users.find((item) => item.id === session.userId);
+  if (!user) {
+    throw createHttpError(401, "invalid_token", "登录已失效，请重新登录。");
+  }
+  return { user: publicUser(user), storage: "json" };
 }
 
 function escapeHtml(value) {
@@ -397,10 +700,25 @@ async function createBuild(body) {
 async function readPlatformStatus() {
   const state = await readState();
   let fileSize = 0;
+  let authStatus = "healthy";
+  let authLatency = 1;
+  let authEndpoint = authStorageMode === "mysql" ? "mysql.builderos_users" : authFile;
   try {
     fileSize = (await stat(stateFile)).size;
   } catch {
     fileSize = 0;
+  }
+  try {
+    const startedAt = Date.now();
+    const pool = await getMysqlPool();
+    if (pool) {
+      await pool.execute("SELECT COUNT(*) AS total FROM builderos_users");
+    } else {
+      await readAuthState();
+    }
+    authLatency = Math.max(1, Date.now() - startedAt);
+  } catch {
+    authStatus = "degraded";
   }
   return {
     serverTime: new Date().toISOString(),
@@ -418,9 +736,17 @@ async function readPlatformStatus() {
       knowledgeSources: state.knowledgeSources.length,
       runRecords: state.runRecords.length,
       updatedAt: state.updatedAt,
+      authStore: authStorageMode,
     },
     services: [
       { name: "BuilderOS API", status: "healthy", statusCode: 200, latencyMs: 0, endpoint: "/api/health" },
+      {
+        name: "Auth Store",
+        status: authStatus,
+        statusCode: authStatus === "healthy" ? 200 : 500,
+        latencyMs: authLatency,
+        endpoint: authEndpoint,
+      },
       {
         name: "Build Engine",
         status: "healthy",
@@ -477,6 +803,21 @@ createServer(async (request, response) => {
       return;
     }
 
+    if (request.method === "GET" && url.pathname === "/api/auth/me") {
+      sendJson(response, 200, await getCurrentUser(request));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/register") {
+      sendJson(response, 201, await registerUser(await readJsonBody(request)));
+      return;
+    }
+
+    if (request.method === "POST" && url.pathname === "/api/auth/login") {
+      sendJson(response, 200, await loginUser(await readJsonBody(request)));
+      return;
+    }
+
     if (request.method === "GET" && url.pathname === "/api/state") {
       sendJson(response, 200, await readState());
       return;
@@ -494,7 +835,12 @@ createServer(async (request, response) => {
 
     sendJson(response, 404, { ok: false, error: "not_found" });
   } catch (error) {
-    sendJson(response, 500, { ok: false, error: error instanceof Error ? error.message : "unknown_error" });
+    const statusCode = Number(error?.statusCode) || 500;
+    sendJson(response, statusCode, {
+      ok: false,
+      error: error?.code || "server_error",
+      message: error instanceof Error ? error.message : "unknown_error",
+    });
   }
 }).listen(port, "127.0.0.1", () => {
   console.log(`BuilderOS API listening on http://127.0.0.1:${port}`);

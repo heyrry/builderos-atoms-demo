@@ -66,7 +66,14 @@ type Project = {
   updatedAt: string;
   prompt: string;
   generated: GeneratedApp;
+  artifactPath?: string;
   publishedUrl?: string;
+};
+
+type GeneratedFile = {
+  path: string;
+  language: string;
+  content: string;
 };
 
 type GeneratedApp = {
@@ -82,6 +89,7 @@ type GeneratedApp = {
   css: string;
   js: string;
   srcDoc: string;
+  files: GeneratedFile[];
   alternatives: Array<{ name: string; score: number; angle: string }>;
   knowledgeHits: Array<{ title: string; excerpt: string; score: number }>;
   extensions: string[];
@@ -377,6 +385,185 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#039;");
 }
 
+function toKebabCase(value: string) {
+  return (
+    value
+      .toLowerCase()
+      .replace(/[^\u4e00-\u9fa5a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "")
+      .slice(0, 42) || "builderos-app"
+  );
+}
+
+function createProjectFiles({
+  title,
+  prompt,
+  product,
+  metrics,
+  knowledgeHits,
+  html,
+  css,
+  js,
+}: {
+  title: string;
+  prompt: string;
+  product: ReturnType<typeof inferProduct>;
+  metrics: Array<{ label: string; value: string; delta: string }>;
+  knowledgeHits: Array<{ title: string; excerpt: string; score: number }>;
+  html: string;
+  css: string;
+  js: string;
+}): GeneratedFile[] {
+  const packageName = toKebabCase(title);
+  const appTsx = `import { useState } from "react";
+import "./styles.css";
+import { evidence, features, metrics, pages, prompt, title } from "./data/generated";
+
+export default function App() {
+  const [activePage, setActivePage] = useState(pages[0]);
+  const [activities, setActivities] = useState([
+    "Product Agent 已完成需求拆解",
+    "Research Agent 已完成知识召回",
+    "Engineer Agent 已生成首版页面",
+  ]);
+
+  return (
+    <div className="generated-app">
+      <aside className="generated-sidebar">
+        <div className="generated-logo">{title}</div>
+        <nav className="generated-nav">
+          {pages.map((page) => (
+            <button
+              key={page}
+              className={activePage === page ? "active" : ""}
+              onClick={() => setActivePage(page)}
+            >
+              {page}
+            </button>
+          ))}
+        </nav>
+      </aside>
+      <main className="generated-main">
+        <section className="hero">
+          <div>
+            <h1>{title}</h1>
+            <p>根据需求「{prompt}」生成的可交互产品原型。当前页面：{activePage}。</p>
+            <p className="evidence">RAG evidence: {evidence.map((item) => item.title).join(" · ")}</p>
+          </div>
+          <button
+            className="primary"
+            onClick={() => setActivities((items) => ["新任务已进入 Agent 队列：" + new Date().toLocaleTimeString(), ...items])}
+          >
+            派发 Agent 任务
+          </button>
+        </section>
+
+        <section className="metrics">
+          {metrics.map((metric) => (
+            <section className="metric" key={metric.label}>
+              <span>{metric.label}</span>
+              <strong>{metric.value}</strong>
+              <em>{metric.delta}</em>
+            </section>
+          ))}
+        </section>
+
+        <section className="grid">
+          <div className="panel">
+            <h2>功能 Backlog</h2>
+            <div className="feature-list">
+              {features.map((feature) => (
+                <div className="feature" key={feature}>
+                  <span>{feature}</span>
+                  <button>加入迭代</button>
+                </div>
+              ))}
+            </div>
+          </div>
+          <div className="panel">
+            <h2>实时活动</h2>
+            <div className="activity">
+              {activities.map((item) => (
+                <div key={item}>{item}</div>
+              ))}
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+  );
+}
+`;
+  const dataTs = `export const title = ${JSON.stringify(title)};
+export const prompt = ${JSON.stringify(prompt)};
+export const category = ${JSON.stringify(product.category)};
+export const pages = ${JSON.stringify(product.pages, null, 2)} as const;
+export const features = ${JSON.stringify(product.features, null, 2)} as const;
+export const metrics = ${JSON.stringify(metrics, null, 2)} as const;
+export const evidence = ${JSON.stringify(knowledgeHits, null, 2)} as const;
+`;
+
+  return [
+    {
+      path: "app/frontend/package.json",
+      language: "json",
+      content: JSON.stringify(
+        {
+          name: packageName,
+          private: true,
+          type: "module",
+          scripts: { dev: "vite --host 0.0.0.0", build: "tsc && vite build", preview: "vite preview" },
+          dependencies: { "@vitejs/plugin-react": "^4.3.4", react: "^18.3.1", "react-dom": "^18.3.1", vite: "^5.4.11" },
+          devDependencies: { typescript: "^5.6.3", "@types/react": "^18.3.12", "@types/react-dom": "^18.3.1" },
+        },
+        null,
+        2,
+      ),
+    },
+    {
+      path: "app/frontend/index.html",
+      language: "html",
+      content: '<div id="root"></div><script type="module" src="/src/main.tsx"></script>',
+    },
+    {
+      path: "app/frontend/src/main.tsx",
+      language: "tsx",
+      content:
+        'import React from "react";\nimport { createRoot } from "react-dom/client";\nimport App from "./App";\n\ncreateRoot(document.getElementById("root")!).render(<App />);\n',
+    },
+    { path: "app/frontend/src/App.tsx", language: "tsx", content: appTsx },
+    { path: "app/frontend/src/styles.css", language: "css", content: css },
+    { path: "app/frontend/src/data/generated.ts", language: "ts", content: dataTs },
+    { path: "app/generated/preview.html", language: "html", content: html },
+    { path: "app/generated/runtime.js", language: "js", content: js },
+    {
+      path: "README.md",
+      language: "markdown",
+      content: `# ${title}
+
+Generated by BuilderOS from this prompt:
+
+> ${prompt}
+
+## Run
+
+\`\`\`bash
+cd app/frontend
+npm install
+npm run dev
+\`\`\`
+
+## Key Files
+
+- app/frontend/src/App.tsx
+- app/frontend/src/data/generated.ts
+- app/frontend/src/styles.css
+- app/generated/preview.html
+`,
+    },
+  ];
+}
+
 function createGeneratedApp(
   prompt: string,
   mode: WorkMode,
@@ -413,8 +600,8 @@ function createGeneratedApp(
   const extensions = [
     "BuilderOS RAG 知识库 grounding",
     "Agent 执行轨迹与评审证据",
-    "源码解释、复制和单文件导出",
-    "服务端 JSON 持久化，浏览器离线时自动降级",
+    "生成 React/Vite 项目目录和可浏览文件树",
+    "源码复制、单文件导出和服务端目录落盘",
   ];
   const infraPlan = [
     { layer: "Frontend", detail: "React + Vite 负责 Atoms-like 构建工作台和 iframe 预览。" },
@@ -544,6 +731,16 @@ document.querySelector(".primary").addEventListener("click", () => {
     <script>${js}</script>
   </body>
 </html>`;
+  const files = createProjectFiles({
+    title,
+    prompt,
+    product,
+    metrics,
+    knowledgeHits,
+    html,
+    css,
+    js,
+  });
 
   return {
     title,
@@ -558,6 +755,7 @@ document.querySelector(".primary").addEventListener("click", () => {
     css,
     js,
     srcDoc: html,
+    files,
     alternatives,
     knowledgeHits,
     extensions,
@@ -1784,6 +1982,17 @@ function MockApp() {
 
 type SourceTab = "html" | "css" | "js";
 
+function getGeneratedFiles(project: Project): GeneratedFile[] {
+  if (project.generated.files?.length) {
+    return project.generated.files;
+  }
+  return [
+    { path: "app/generated/preview.html", language: "html", content: project.generated.html },
+    { path: "app/generated/styles.css", language: "css", content: project.generated.css },
+    { path: "app/generated/runtime.js", language: "js", content: project.generated.js },
+  ];
+}
+
 function GeneratedPreview({ project }: { project: Project }) {
   return (
     <iframe
@@ -1803,13 +2012,26 @@ function GeneratedSummary({
   onDownloadProject: (project: Project) => void;
 }) {
   const [activeTab, setActiveTab] = useState<SourceTab>("html");
+  const files = getGeneratedFiles(project);
+  const [activeFilePath, setActiveFilePath] = useState(files[0]?.path || "");
   const [copied, setCopied] = useState(false);
+  const [copiedFile, setCopiedFile] = useState(false);
   const source = project.generated[activeTab];
+  const activeFile = files.find((file) => file.path === activeFilePath) ?? files[0];
 
   async function copySource() {
     await navigator.clipboard.writeText(source);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1200);
+  }
+
+  async function copyActiveFile() {
+    if (!activeFile) {
+      return;
+    }
+    await navigator.clipboard.writeText(activeFile.content);
+    setCopiedFile(true);
+    window.setTimeout(() => setCopiedFile(false), 1200);
   }
 
   return (
@@ -1873,6 +2095,40 @@ function GeneratedSummary({
           </div>
         </div>
       )}
+
+      <div className="artifact-panel">
+        <div className="artifact-header">
+          <div>
+            <span className="eyebrow">Project Files</span>
+            <h3>生成项目目录</h3>
+          </div>
+          <small>{project.artifactPath || "browser-local/generated-project"}</small>
+        </div>
+        <div className="artifact-layout">
+          <div className="file-tree" aria-label="生成文件列表">
+            {files.map((file) => (
+              <button
+                key={file.path}
+                className={activeFile?.path === file.path ? "active" : ""}
+                onClick={() => setActiveFilePath(file.path)}
+              >
+                <FileText size={15} />
+                <span>{file.path}</span>
+              </button>
+            ))}
+          </div>
+          <div className="file-viewer">
+            <div className="file-viewer-bar">
+              <span>{activeFile?.path}</span>
+              <button onClick={copyActiveFile} disabled={!activeFile}>
+                <Copy size={14} />
+                {copiedFile ? "已复制" : "复制文件"}
+              </button>
+            </div>
+            <pre>{activeFile?.content}</pre>
+          </div>
+        </div>
+      </div>
 
       <div className="source-panel">
         <div className="source-tabs">

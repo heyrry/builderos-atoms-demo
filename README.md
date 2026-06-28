@@ -10,10 +10,12 @@
 - 智能体构建流程：根据 prompt 进入构建队列，展示 Agent 时间线和进度。
 - 应用生成：根据需求类型生成 SaaS / 电商 / 招聘 / 研究 / 视频等不同原型。
 - 可视化预览：生成结果通过 iframe `srcDoc` 渲染为可交互网页。
-- 生成源码：展示 HTML / CSS / JS 三类源码，支持复制源码和导出单文件 HTML。
+- 生成项目目录：每次构建生成 React/Vite 项目文件树，包含 `app/frontend/src/App.tsx`、`src/data/generated.ts`、`src/styles.css`、`app/generated/preview.html` 等文件。
+- 源码查看：工作台内可点击文件树查看对应文件源码，同时保留 HTML / CSS / JS 快速查看、复制和导出单文件 HTML。
 - 增强型 RAG 知识库：可写入资料，构建结果展示召回证据和命中分数。
 - 真实运行数据：`/api/status` 返回 BuilderOS API、Auth Store、Build Engine、RAG Engine、进程内存、持久化文件和运行记录统计。
-- 服务端构建：`/api/build` 根据 prompt 创建项目、源码产物和 Agent run record，并持久化到服务端。
+- 服务端构建：`/api/build` 根据 prompt 创建项目、源码产物、项目目录和 Agent run record，并持久化到服务端。
+- 文件产物接口：`/api/projects/:id/files` 返回项目文件 manifest，生产环境同步落盘到 `/opt/builderos/data/generated-projects/project-<id>/`。
 - Atoms 差异页：直接说明本平台相对 Atoms 新增的知识 grounding、评审证据、源码交付和部署检查能力。
 - 数据持久化：生产环境通过 MySQL 保存用户和会话，通过 Node API 保存项目和知识库；本地或离线时自动降级到 `localStorage`。
 - 延展能力：Race Mode 会生成多方案评分，发布按钮会持久化发布状态。
@@ -56,4 +58,4 @@ npm run build
 
 ## 关键取舍
 
-当前 Demo 重点验证“AI Agent 驱动生成应用并可视化展示”的产品闭环。为了比纯静态原型更接近真实平台，增加了轻量 Node API、MySQL 用户注册登录和服务端 JSON 持久化，同时保留 `localStorage` 降级能力。后续最重要的升级是把当前模板生成器替换为真实 LLM + RAG 向量检索 + 沙箱执行链路。
+当前 Demo 重点验证“AI Agent 驱动生成应用并可视化展示”的产品闭环。为了比纯静态原型更接近真实平台，增加了轻量 Node API、MySQL 用户注册登录、服务端 JSON 持久化和真实项目文件夹落盘，同时保留 `localStorage` 降级能力。后续最重要的升级是把当前模板生成器替换为真实 LLM + RAG 向量检索 + 沙箱执行链路。

@@ -1536,6 +1536,7 @@ button {
 }
 
 .summary-column,
+.artifact-panel,
 .source-panel {
   min-width: 0;
   border: 1px solid #e1e0de;
@@ -1663,6 +1664,129 @@ button {
   padding: 9px 10px;
   font-size: 13px;
   font-weight: 720;
+}
+
+.artifact-panel {
+  grid-column: 1 / -1;
+  padding: 0;
+  overflow: hidden;
+}
+
+.artifact-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border-bottom: 1px solid #e7e6e3;
+  background: #fbfbfa;
+  padding: 12px 14px;
+}
+
+.artifact-header h3 {
+  margin: 4px 0 0;
+  font-size: 17px;
+}
+
+.artifact-header small {
+  max-width: 48%;
+  overflow: hidden;
+  color: var(--text-muted);
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.artifact-layout {
+  display: grid;
+  grid-template-columns: minmax(210px, 0.34fr) minmax(0, 1fr);
+  min-height: 390px;
+}
+
+.file-tree {
+  display: grid;
+  align-content: start;
+  gap: 4px;
+  border-right: 1px solid #e7e6e3;
+  background: #f8f8f7;
+  padding: 10px;
+}
+
+.file-tree button {
+  display: grid;
+  grid-template-columns: 16px 1fr;
+  align-items: center;
+  gap: 8px;
+  min-height: 34px;
+  border-radius: 7px;
+  background: transparent;
+  color: #4f555f;
+  padding: 0 8px;
+  text-align: left;
+}
+
+.file-tree button.active {
+  background: #e9edff;
+  color: var(--blue);
+}
+
+.file-tree span {
+  overflow: hidden;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer {
+  min-width: 0;
+  background: #111513;
+}
+
+.file-viewer-bar {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: #d8f3e2;
+  padding: 0 12px;
+}
+
+.file-viewer-bar span {
+  min-width: 0;
+  overflow: hidden;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-viewer-bar button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  min-height: 29px;
+  align-items: center;
+  gap: 5px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+  padding: 0 10px;
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.file-viewer pre {
+  max-height: 360px;
+  margin: 0;
+  overflow: auto;
+  color: #d8f3e2;
+  padding: 14px;
+  font-family: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+  font-size: 12px;
+  line-height: 1.55;
+  white-space: pre-wrap;
 }
 
 .source-panel {
@@ -2625,13 +2749,22 @@ button {
   .mock-metrics,
   .project-row,
   .generated-summary,
+  .artifact-layout,
   .setup-grid,
   .setup-summary {
     grid-template-columns: 1fr;
   }
 
+  .artifact-panel,
   .source-panel {
     grid-column: auto;
+  }
+
+  .file-tree {
+    max-height: 220px;
+    overflow: auto;
+    border-right: 0;
+    border-bottom: 1px solid #e7e6e3;
   }
 
   .source-tabs,

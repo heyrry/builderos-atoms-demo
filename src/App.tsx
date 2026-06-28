@@ -826,7 +826,7 @@ function App() {
     }
 
     setStartAfterSignup(shouldStartAfterSignup);
-    setAuthIntent(shouldStartAfterSignup ? "signup" : "login");
+    setAuthIntent("signup");
   }
 
   function saveProfile(nextProfile: WorkspaceProfile) {
@@ -847,9 +847,19 @@ function App() {
         <AuthPage
           intent={authIntent}
           profile={profile}
+          registered={!registrationRequired}
           onBack={() => {
             setStartAfterSignup(false);
             setAuthIntent(null);
+          }}
+          onCreate={() => {
+            setStartAfterSignup(false);
+            setAuthIntent("signup");
+          }}
+          onEnter={() => {
+            setWorkspaceOpen(true);
+            setAuthIntent(null);
+            setOnboardingOpen(false);
           }}
           onSave={saveProfile}
         />
@@ -865,10 +875,7 @@ function App() {
           setAuthIntent("login");
         }}
         onPromptChange={setPrompt}
-        onSignup={() => {
-          setStartAfterSignup(false);
-          setAuthIntent("signup");
-        }}
+        onSignup={() => requestSignup(false)}
         onStart={() => requestSignup(true)}
       />
     );
@@ -1243,11 +1250,14 @@ function PublicLanding({
 type AuthPageProps = {
   intent: AuthIntent;
   profile: WorkspaceProfile;
+  registered: boolean;
   onBack: () => void;
+  onCreate: () => void;
+  onEnter: () => void;
   onSave: (profile: WorkspaceProfile) => void;
 };
 
-function AuthPage({ intent, profile, onBack, onSave }: AuthPageProps) {
+function AuthPage({ intent, profile, registered, onBack, onCreate, onEnter, onSave }: AuthPageProps) {
   const [draft, setDraft] = useState<WorkspaceProfile>({
     ...defaultProfile,
     ...profile,
@@ -1255,11 +1265,23 @@ function AuthPage({ intent, profile, onBack, onSave }: AuthPageProps) {
     email: profile.email || "",
     goal: profile.goal || defaultProfile.goal,
   });
-  const canSubmit = draft.name.trim().length >= 2 && /\S+@\S+\.\S+/.test(draft.email.trim());
+  const emailPattern = /\S+@\S+\.\S+/;
+  const normalizedEmail = draft.email.trim().toLowerCase();
+  const storedEmail = profile.email.trim().toLowerCase();
+  const canCreate = draft.name.trim().length >= 2 && emailPattern.test(draft.email.trim());
+  const canLogin = registered && emailPattern.test(draft.email.trim()) && normalizedEmail === storedEmail;
+  const canSubmit = intent === "signup" ? canCreate : canLogin;
+  const loginBlocked = intent === "login" && !registered;
+  const loginMismatch = intent === "login" && registered && normalizedEmail.length > 0 && normalizedEmail !== storedEmail;
   const title = intent === "login" ? "登录 BuilderOS" : "创建 BuilderOS 工作区";
 
   function submit() {
     if (!canSubmit) {
+      return;
+    }
+
+    if (intent === "login") {
+      onEnter();
       return;
     }
 
@@ -1292,11 +1314,12 @@ function AuthPage({ intent, profile, onBack, onSave }: AuthPageProps) {
         <button
           className="google-auth"
           type="button"
+          disabled={loginBlocked}
           onClick={() =>
             setDraft((value) => ({
               ...value,
-              name: value.name || "Builder Team",
-              email: value.email || "builder@example.com",
+              name: value.name || profile.name || "Builder Team",
+              email: value.email || profile.email || "builder@example.com",
             }))
           }
         >
@@ -1310,22 +1333,38 @@ function AuthPage({ intent, profile, onBack, onSave }: AuthPageProps) {
           <span />
         </div>
 
-        <label>
-          工作区名称
-          <input
-            value={draft.name}
-            placeholder="输入你的名字或团队名"
-            onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
-          />
-        </label>
+        {intent === "signup" && (
+          <label>
+            工作区名称
+            <input
+              value={draft.name}
+              placeholder="输入你的名字或团队名"
+              onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
+            />
+          </label>
+        )}
         <label>
           电子邮箱
           <input
             value={draft.email}
-            placeholder="用于登录和归属工作区"
+            placeholder={intent === "login" ? "输入已注册工作区邮箱" : "用于登录和归属工作区"}
             onChange={(event) => setDraft((value) => ({ ...value, email: event.target.value }))}
           />
         </label>
+
+        {loginBlocked && (
+          <div className="auth-notice" role="status">
+            当前浏览器还没有创建 BuilderOS 工作区，请先注册/创建工作区后再登录。
+            <button type="button" onClick={onCreate}>
+              先创建工作区
+            </button>
+          </div>
+        )}
+        {loginMismatch && (
+          <div className="auth-notice" role="status">
+            这个邮箱没有匹配到当前工作区，请使用已注册邮箱：{profile.email}。
+          </div>
+        )}
 
         <p className="auth-terms">继续即表示同意 BuilderOS 的服务条款与隐私政策。</p>
         <button className="auth-submit" disabled={!canSubmit} onClick={submit}>

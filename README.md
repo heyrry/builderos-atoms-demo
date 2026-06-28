@@ -1,6 +1,6 @@
 # Atoms Demo - he0yan
 
-一个面向 ROOT / AI Native 全栈工程师笔试的 Atoms-like Demo。它模拟 AI Agent 平台的核心流程：用户输入产品需求，多智能体协作生成应用，并把生成出的应用以可交互网页形式展示。当前版本在 Atoms-like 体验之上，增加了借鉴 OmniAgent 的 RAG 知识库、Agent 执行轨迹、源码产物和服务端持久化。
+一个面向 ROOT / AI Native 全栈工程师笔试的 Atoms-like Demo。它模拟 AI Agent 平台的核心流程：用户输入产品需求，多智能体协作生成应用，并把生成出的应用以可交互网页形式展示。当前版本在 Atoms-like 体验之上，增加了 BuilderOS RAG 知识库、Agent 执行轨迹、源码产物和服务端持久化。
 
 ## 已实现
 
@@ -11,6 +11,8 @@
 - 可视化预览：生成结果通过 iframe `srcDoc` 渲染为可交互网页。
 - 生成源码：展示 HTML / CSS / JS 三类源码，支持复制源码和导出单文件 HTML。
 - 增强型 RAG 知识库：可写入资料，构建结果展示召回证据和命中分数。
+- 真实运行数据：`/api/status` 返回 BuilderOS API、Build Engine、RAG Engine、进程内存、持久化文件和运行记录统计。
+- 服务端构建：`/api/build` 根据 prompt 创建项目、源码产物和 Agent run record，并持久化到服务端。
 - Atoms 差异页：直接说明本平台相对 Atoms 新增的知识 grounding、评审证据、源码交付和部署检查能力。
 - 数据持久化：生产环境通过 Node API 保存项目和知识库；本地或离线时自动降级到 `localStorage`。
 - 延展能力：Race Mode 会生成多方案评分，发布按钮会持久化发布状态。

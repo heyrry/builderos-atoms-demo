@@ -52,7 +52,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type Section = "home" | "resources" | "knowledge" | "compare" | "projects";
+type Section = "home" | "resources" | "knowledge" | "data" | "compare" | "projects";
 type WorkMode = "build" | "research" | "video";
 
 type Project = {
@@ -90,6 +90,47 @@ type WorkspaceProfile = {
   email: string;
   goal: string;
   credits: number;
+};
+
+type RunRecord = {
+  id: string;
+  projectId: number;
+  prompt: string;
+  mode: WorkMode;
+  status: "completed" | "failed" | "running";
+  startedAt: string;
+  finishedAt?: string;
+  durationMs: number;
+  agentCount: number;
+  agents: Array<{ name: string; role: string; state: string }>;
+  knowledgeHits: Array<{ title: string; excerpt: string; score: number }>;
+  output: { pages: number; features: number; sourceBytes: number };
+};
+
+type PlatformStatus = {
+  serverTime: string;
+  process: {
+    pid: number;
+    node: string;
+    uptimeSeconds: number;
+    memoryMb: number;
+  };
+  storage: {
+    dataDir: string;
+    stateFile: string;
+    stateFileBytes: number;
+    projects: number;
+    knowledgeSources: number;
+    runRecords: number;
+    updatedAt: string;
+  };
+  services: Array<{
+    name: string;
+    status: "healthy" | "degraded";
+    statusCode: number;
+    latencyMs: number;
+    endpoint: string;
+  }>;
 };
 
 type KnowledgeSource = {
@@ -163,10 +204,10 @@ const defaultProfile: WorkspaceProfile = {
 const defaultKnowledgeSources: KnowledgeSource[] = [
   {
     id: 1,
-    title: "OmniAgent 增强型 RAG",
+    title: "BuilderOS 增强型 RAG",
     content:
-      "借鉴 OmniAgent 的知识库思路：文档上传后进入解析、切块、向量召回、证据聚合和回答生成链路，Agent 输出必须附带来源与可信度。",
-    tags: ["RAG", "Knowledge", "OmniAgent"],
+      "BuilderOS 的知识库链路：资料进入解析、切块、召回、证据聚合和产物生成流程，Agent 输出必须附带来源与可信度。",
+    tags: ["RAG", "Knowledge", "BuilderOS"],
     updatedAt: "内置",
   },
   {
@@ -189,7 +230,14 @@ const defaultKnowledgeSources: KnowledgeSource[] = [
 
 type ServerState = {
   projects?: Project[];
+  runRecords?: RunRecord[];
   knowledgeSources?: KnowledgeSource[];
+};
+
+type BuildResponse = {
+  project: Project;
+  run: RunRecord;
+  state: ServerState;
 };
 
 function usePersistentState<T>(key: string, initialValue: T) {
@@ -336,7 +384,7 @@ function createGeneratedApp(
       ]
     : [];
   const extensions = [
-    "OmniAgent-style RAG 知识库 grounding",
+    "BuilderOS RAG 知识库 grounding",
     "Agent 执行轨迹与评审证据",
     "源码解释、复制和单文件导出",
     "服务端 JSON 持久化，浏览器离线时自动降级",
@@ -344,7 +392,7 @@ function createGeneratedApp(
   const infraPlan = [
     { layer: "Frontend", detail: "React + Vite 负责 Atoms-like 构建工作台和 iframe 预览。" },
     { layer: "API", detail: "Node 标准库 API 保存项目、知识库和构建记录。" },
-    { layer: "Proxy", detail: "nginx 独立二级域名接入，不复用 OmniAgent 端口。" },
+    { layer: "Proxy", detail: "nginx 独立二级域名接入，BuilderOS API 只监听本机端口。" },
   ];
 
   const css = `
@@ -506,11 +554,14 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [currentBuildPrompt, setCurrentBuildPrompt] = useState("");
   const [projects, setProjects] = usePersistentState<Project[]>(storageKey, []);
+  const [runRecords, setRunRecords] = usePersistentState<RunRecord[]>("atoms-demo-he0yan-runs-v1", []);
   const [knowledgeSources, setKnowledgeSources] = usePersistentState<KnowledgeSource[]>(
     knowledgeKey,
     defaultKnowledgeSources,
   );
   const [serverStatus, setServerStatus] = useState<"connecting" | "synced" | "local">("connecting");
+  const [platformStatus, setPlatformStatus] = useState<PlatformStatus | null>(null);
+  const [isFinalizing, setIsFinalizing] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = usePersistentState<number | null>(
     "atoms-demo-he0yan-selected-project-v1",
     null,
@@ -544,6 +595,9 @@ function App() {
           setProjects(state.projects);
           setSelectedProjectId(state.projects[0].id);
         }
+        if (state.runRecords?.length) {
+          setRunRecords(state.runRecords);
+        }
         if (state.knowledgeSources?.length) {
           setKnowledgeSources(state.knowledgeSources);
         }
@@ -558,7 +612,34 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [setKnowledgeSources, setProjects, setSelectedProjectId]);
+  }, [setKnowledgeSources, setProjects, setRunRecords, setSelectedProjectId]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    function refreshStatus() {
+      apiRequest<PlatformStatus>("/api/status")
+        .then((status) => {
+          if (!ignore) {
+            setPlatformStatus(status);
+            setServerStatus("synced");
+          }
+        })
+        .catch(() => {
+          if (!ignore) {
+            setServerStatus("local");
+          }
+        });
+    }
+
+    refreshStatus();
+    const timer = window.setInterval(refreshStatus, 10000);
+
+    return () => {
+      ignore = true;
+      window.clearInterval(timer);
+    };
+  }, []);
 
   useEffect(() => {
     if (!isBuilding) {
@@ -573,43 +654,96 @@ function App() {
   }, [isBuilding]);
 
   useEffect(() => {
-    if (!isBuilding || progress < 100) {
+    if (!isBuilding || isFinalizing || progress < 100) {
       return;
     }
 
-    const generated = createGeneratedApp(currentBuildPrompt, workMode, raceMode, knowledgeSources);
-    const newProject: Project = {
-      id: Date.now(),
-      title: generated.title,
-      mode: workMode,
-      status: "可预览",
-      updatedAt: "刚刚",
-      prompt: currentBuildPrompt,
-      generated,
-    };
-
-    setIsBuilding(false);
-    setProjects((items) => {
-      const nextProjects = [newProject, ...items];
-      void syncServerState(nextProjects, knowledgeSources);
-      return nextProjects;
-    });
-    setSelectedProjectId(newProject.id);
+    setIsFinalizing(true);
+    apiRequest<BuildResponse>("/api/build", {
+      method: "POST",
+      body: JSON.stringify({ prompt: currentBuildPrompt, mode: workMode, raceMode }),
+    })
+      .then((result) => {
+        const nextProjects = result.state.projects?.length ? result.state.projects : [result.project, ...projects];
+        const nextRunRecords = result.state.runRecords?.length ? result.state.runRecords : [result.run, ...runRecords];
+        setProjects(nextProjects);
+        setRunRecords(nextRunRecords);
+        if (result.state.knowledgeSources?.length) {
+          setKnowledgeSources(result.state.knowledgeSources);
+        }
+        setSelectedProjectId(result.project.id);
+        setServerStatus("synced");
+      })
+      .catch(() => {
+        const generated = createGeneratedApp(currentBuildPrompt, workMode, raceMode, knowledgeSources);
+        const fallbackId = Date.now();
+        const newProject: Project = {
+          id: fallbackId,
+          title: generated.title,
+          mode: workMode,
+          status: "可预览",
+          updatedAt: "刚刚",
+          prompt: currentBuildPrompt,
+          generated,
+        };
+        const fallbackRun: RunRecord = {
+          id: `local-${fallbackId}`,
+          projectId: fallbackId,
+          prompt: currentBuildPrompt,
+          mode: workMode,
+          status: "completed",
+          startedAt: new Date().toISOString(),
+          finishedAt: new Date().toISOString(),
+          durationMs: 0,
+          agentCount: activeAgents.length,
+          agents: activeAgents.map((agent) => ({ name: agent.name, role: agent.role, state: agent.state })),
+          knowledgeHits: generated.knowledgeHits,
+          output: {
+            pages: generated.pages.length,
+            features: generated.features.length,
+            sourceBytes: generated.html.length,
+          },
+        };
+        const nextProjects = [newProject, ...projects];
+        const nextRunRecords = [fallbackRun, ...runRecords];
+        setProjects(nextProjects);
+        setRunRecords(nextRunRecords);
+        setSelectedProjectId(newProject.id);
+        void syncServerState(nextProjects, knowledgeSources, nextRunRecords);
+      })
+      .finally(() => {
+        setIsBuilding(false);
+        setIsFinalizing(false);
+      });
   }, [
+    activeAgents,
     currentBuildPrompt,
+    isFinalizing,
     isBuilding,
     knowledgeSources,
+    projects,
     progress,
     raceMode,
+    runRecords,
+    setKnowledgeSources,
     setProjects,
+    setRunRecords,
     setSelectedProjectId,
     workMode,
   ]);
 
-  function syncServerState(nextProjects = projects, nextKnowledgeSources = knowledgeSources) {
+  function syncServerState(
+    nextProjects = projects,
+    nextKnowledgeSources = knowledgeSources,
+    nextRunRecords = runRecords,
+  ) {
     return apiRequest<ServerState>("/api/state", {
       method: "POST",
-      body: JSON.stringify({ projects: nextProjects, knowledgeSources: nextKnowledgeSources }),
+      body: JSON.stringify({
+        projects: nextProjects,
+        knowledgeSources: nextKnowledgeSources,
+        runRecords: nextRunRecords,
+      }),
     })
       .then(() => setServerStatus("synced"))
       .catch(() => setServerStatus("local"));
@@ -706,6 +840,12 @@ function App() {
             label="知识库"
             active={activeSection === "knowledge"}
             onClick={() => setActiveSection("knowledge")}
+          />
+          <NavItem
+            icon={Server}
+            label="实时数据"
+            active={activeSection === "data"}
+            onClick={() => setActiveSection("data")}
           />
           <NavItem
             icon={FlaskConical}
@@ -815,6 +955,14 @@ function App() {
         {activeSection === "resources" && <ResourcesView />}
         {activeSection === "knowledge" && (
           <KnowledgeView knowledgeSources={knowledgeSources} onSaveKnowledgeSources={saveKnowledgeSources} />
+        )}
+        {activeSection === "data" && (
+          <DataView
+            knowledgeSources={knowledgeSources}
+            platformStatus={platformStatus}
+            projects={projects}
+            runRecords={runRecords}
+          />
         )}
         {activeSection === "compare" && <CompareView />}
         {activeSection === "projects" && (
@@ -1278,6 +1426,161 @@ function ResourcesView() {
   );
 }
 
+function formatDateTime(value?: string) {
+  if (!value) {
+    return "-";
+  }
+  return new Intl.DateTimeFormat("zh-CN", {
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+  }).format(new Date(value));
+}
+
+function formatBytes(value: number) {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${(value / 1024).toFixed(1)} KB`;
+  }
+  return `${(value / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatDuration(value: number) {
+  if (value < 1000) {
+    return `${value} ms`;
+  }
+  return `${(value / 1000).toFixed(2)} s`;
+}
+
+type DataViewProps = {
+  knowledgeSources: KnowledgeSource[];
+  platformStatus: PlatformStatus | null;
+  projects: Project[];
+  runRecords: RunRecord[];
+};
+
+function DataView({ knowledgeSources, platformStatus, projects, runRecords }: DataViewProps) {
+  const latestRun = runRecords[0];
+
+  return (
+    <section className="section-view">
+      <div className="section-heading">
+        <span className="eyebrow">Live Platform Data</span>
+        <h1>真实运行数据</h1>
+      </div>
+
+      <div className="live-metric-grid">
+        <Stat label="服务端项目" value={String(platformStatus?.storage.projects ?? projects.length)} icon={FolderKanban} />
+        <Stat
+          label="知识条目"
+          value={String(platformStatus?.storage.knowledgeSources ?? knowledgeSources.length)}
+          icon={Brain}
+        />
+        <Stat label="运行记录" value={String(platformStatus?.storage.runRecords ?? runRecords.length)} icon={Activity} />
+        <Stat label="API 内存" value={`${platformStatus?.process.memoryMb ?? 0} MB`} icon={Server} />
+      </div>
+
+      <div className="ops-layout">
+        <div className="ops-panel">
+          <div className="panel-title-row">
+            <div>
+              <span className="eyebrow">Service Health</span>
+              <h2>服务健康</h2>
+            </div>
+            <small>{formatDateTime(platformStatus?.serverTime)}</small>
+          </div>
+          <div className="service-list">
+            {(platformStatus?.services ?? []).map((service) => (
+              <div key={service.name}>
+                <span className={service.status === "healthy" ? "health-dot healthy" : "health-dot degraded"} />
+                <strong>{service.name}</strong>
+                <small>{service.endpoint}</small>
+                <em>
+                  {service.statusCode} · {service.latencyMs}ms
+                </em>
+              </div>
+            ))}
+            {!platformStatus && <p className="muted-copy">正在读取服务状态...</p>}
+          </div>
+        </div>
+
+        <div className="ops-panel">
+          <div className="panel-title-row">
+            <div>
+              <span className="eyebrow">Storage</span>
+              <h2>持久化文件</h2>
+            </div>
+            <small>{formatBytes(platformStatus?.storage.stateFileBytes ?? 0)}</small>
+          </div>
+          <dl className="storage-list">
+            <div>
+              <dt>Data Dir</dt>
+              <dd>{platformStatus?.storage.dataDir ?? "localStorage fallback"}</dd>
+            </div>
+            <div>
+              <dt>Updated</dt>
+              <dd>{formatDateTime(platformStatus?.storage.updatedAt)}</dd>
+            </div>
+            <div>
+              <dt>Node</dt>
+              <dd>{platformStatus?.process.node ?? "-"}</dd>
+            </div>
+            <div>
+              <dt>Uptime</dt>
+              <dd>{formatDuration((platformStatus?.process.uptimeSeconds ?? 0) * 1000)}</dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+
+      <div className="run-console">
+        <div className="panel-title-row">
+          <div>
+            <span className="eyebrow">Build Runs</span>
+            <h2>最近构建记录</h2>
+          </div>
+          {latestRun && <small>Latest: {formatDateTime(latestRun.finishedAt || latestRun.startedAt)}</small>}
+        </div>
+
+        {runRecords.length === 0 ? (
+          <div className="empty-state compact">
+            <Activity size={30} />
+            <h2>还没有服务端运行记录</h2>
+          </div>
+        ) : (
+          <div className="run-list">
+            {runRecords.slice(0, 8).map((run) => (
+              <article key={run.id}>
+                <div>
+                  <strong>{run.prompt}</strong>
+                  <small>
+                    {modeLabel[run.mode]} · {formatDuration(run.durationMs)} · {run.agentCount} Agents
+                  </small>
+                </div>
+                <span className="status-pill">{run.status === "completed" ? "完成" : run.status}</span>
+                <div className="run-output">
+                  <span>{run.output.pages} pages</span>
+                  <span>{run.output.features} features</span>
+                  <span>{formatBytes(run.output.sourceBytes)}</span>
+                </div>
+                <div className="run-knowledge">
+                  {run.knowledgeHits.map((hit) => (
+                    <span key={`${run.id}-${hit.title}`}>{hit.title}</span>
+                  ))}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
 type KnowledgeViewProps = {
   knowledgeSources: KnowledgeSource[];
   onSaveKnowledgeSources: (sources: KnowledgeSource[]) => void;
@@ -1347,7 +1650,7 @@ function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources }: KnowledgeVi
         </div>
 
         <div className="knowledge-explainer">
-          <span className="eyebrow">Borrowed From OmniAgent</span>
+          <span className="eyebrow">BuilderOS RAG Engine</span>
           <h2>为什么加知识库</h2>
           <p>
             Atoms 更强调从自然语言快速生成应用；这里增加 RAG grounding，让 Agent 在生成前先检索内部资料、作业要求和产品规则，再把命中证据带到生成结果里。
@@ -1395,7 +1698,7 @@ function CompareView() {
     {
       area: "知识能力",
       atoms: "偏通用生成与资源连接。",
-      builder: "新增 OmniAgent-style RAG：资料可写入知识库，构建结果展示召回证据。",
+      builder: "新增 BuilderOS RAG：资料可写入知识库，构建结果展示召回证据。",
     },
     {
       area: "工程交付",

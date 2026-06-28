@@ -1,0 +1,16 @@
+[Unit]
+Description=BuilderOS Demo API
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/builderos/current
+Environment=PORT=4188
+Environment=DATA_DIR=/opt/builderos/data
+ExecStart=/usr/bin/node /opt/builderos/current/server/platform-server.mjs
+Restart=always
+RestartSec=3
+User=root
+
+[Install]
+WantedBy=multi-user.target

@@ -43,6 +43,7 @@ import {
   Smartphone,
   Sparkles,
   Tag,
+  Trash2,
   Upload,
   Users,
   Video,
@@ -51,7 +52,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type Section = "home" | "resources" | "projects";
+type Section = "home" | "resources" | "knowledge" | "compare" | "projects";
 type WorkMode = "build" | "research" | "video";
 
 type Project = {
@@ -79,6 +80,9 @@ type GeneratedApp = {
   js: string;
   srcDoc: string;
   alternatives: Array<{ name: string; score: number; angle: string }>;
+  knowledgeHits: Array<{ title: string; excerpt: string; score: number }>;
+  extensions: string[];
+  infraPlan: Array<{ layer: string; detail: string }>;
 };
 
 type WorkspaceProfile = {
@@ -86,6 +90,14 @@ type WorkspaceProfile = {
   email: string;
   goal: string;
   credits: number;
+};
+
+type KnowledgeSource = {
+  id: number;
+  title: string;
+  content: string;
+  tags: string[];
+  updatedAt: string;
 };
 
 type Agent = {
@@ -140,11 +152,44 @@ const initialPrompt = "请描述你要构建的产品、页面、数据、连接
 const candidateName = "he0yan";
 const storageKey = "atoms-demo-he0yan-projects-v1";
 const profileKey = "atoms-demo-he0yan-profile-v1";
+const knowledgeKey = "atoms-demo-he0yan-knowledge-v1";
 const defaultProfile: WorkspaceProfile = {
   name: "he0yan",
   email: "",
   goal: "在 48 小时内完成一个可运行的 Atoms Demo",
   credits: 70,
+};
+
+const defaultKnowledgeSources: KnowledgeSource[] = [
+  {
+    id: 1,
+    title: "OmniAgent 增强型 RAG",
+    content:
+      "借鉴 OmniAgent 的知识库思路：文档上传后进入解析、切块、向量召回、证据聚合和回答生成链路，Agent 输出必须附带来源与可信度。",
+    tags: ["RAG", "Knowledge", "OmniAgent"],
+    updatedAt: "内置",
+  },
+  {
+    id: 2,
+    title: "Agent 执行轨迹",
+    content:
+      "每次构建都记录 PM、架构、工程、数据和发布 Agent 的阶段状态，保留决策原因、输入证据、产物版本和可回放日志。",
+    tags: ["Agent", "Trace", "Review"],
+    updatedAt: "内置",
+  },
+  {
+    id: 3,
+    title: "Atoms 差异化方向",
+    content:
+      "保留 Atoms 的自然语言生成应用体验，同时增加知识库 grounding、源码解释、部署检查、团队评审和企业内部资料连接器。",
+    tags: ["Atoms", "Positioning", "Platform"],
+    updatedAt: "内置",
+  },
+];
+
+type ServerState = {
+  projects?: Project[];
+  knowledgeSources?: KnowledgeSource[];
 };
 
 function usePersistentState<T>(key: string, initialValue: T) {
@@ -162,6 +207,38 @@ function usePersistentState<T>(key: string, initialValue: T) {
   }, [key, value]);
 
   return [value, setValue] as const;
+}
+
+async function apiRequest<T>(path: string, options?: RequestInit): Promise<T> {
+  const response = await fetch(path, {
+    headers: { "Content-Type": "application/json", ...(options?.headers ?? {}) },
+    ...options,
+  });
+  if (!response.ok) {
+    throw new Error(`API ${response.status}`);
+  }
+  return (await response.json()) as T;
+}
+
+function matchKnowledge(prompt: string, sources: KnowledgeSource[]) {
+  const terms = prompt
+    .toLowerCase()
+    .split(/[\s,，。.!?？、/]+/)
+    .filter((term) => term.length >= 2);
+
+  return sources
+    .map((source) => {
+      const haystack = `${source.title} ${source.content} ${source.tags.join(" ")}`.toLowerCase();
+      const score = terms.reduce((total, term) => total + (haystack.includes(term) ? 18 : 0), 0);
+      const tagScore = source.tags.some((tag) => prompt.toLowerCase().includes(tag.toLowerCase())) ? 14 : 0;
+      return {
+        title: source.title,
+        excerpt: source.content.slice(0, 118),
+        score: Math.min(96, score + tagScore + 42),
+      };
+    })
+    .sort((left, right) => right.score - left.score)
+    .slice(0, 3);
 }
 
 function inferProduct(prompt: string, mode: WorkMode) {
@@ -225,11 +302,17 @@ function escapeHtml(value: string) {
     .replace(/'/g, "&#039;");
 }
 
-function createGeneratedApp(prompt: string, mode: WorkMode, raceMode: boolean): GeneratedApp {
+function createGeneratedApp(
+  prompt: string,
+  mode: WorkMode,
+  raceMode: boolean,
+  knowledgeSources: KnowledgeSource[] = defaultKnowledgeSources,
+): GeneratedApp {
   const product = inferProduct(prompt, mode);
   const title = prompt.length > 7 ? `${product.title} · ${prompt.slice(0, 18)}` : product.title;
   const safeTitle = escapeHtml(title);
   const safePrompt = escapeHtml(prompt);
+  const knowledgeHits = matchKnowledge(prompt, knowledgeSources);
   const metrics = [
     { label: "生成页面", value: String(product.pages.length), delta: "+2" },
     { label: "核心功能", value: String(product.features.length), delta: "+4" },
@@ -239,6 +322,10 @@ function createGeneratedApp(prompt: string, mode: WorkMode, raceMode: boolean): 
     { agent: "Alex", note: `将需求拆成 ${product.pages.length} 个页面和 ${product.features.length} 个核心能力。` },
     { agent: "Mira", note: `优先保证 ${product.category} 的主流程可点击、可理解。` },
     { agent: "Noah", note: "采用单页应用结构，方便后续接入真实后端和部署流水线。" },
+    {
+      agent: "Kai",
+      note: `从知识库召回 ${knowledgeHits.length} 条资料，用于约束页面结构、评审说明和扩展路线。`,
+    },
     { agent: "Luna", note: "生成可直接预览的 HTML / CSS / JS，并挂载演示级交互。" },
   ];
   const alternatives = raceMode
@@ -248,6 +335,17 @@ function createGeneratedApp(prompt: string, mode: WorkMode, raceMode: boolean): 
         { name: "Ops-first", score: 84, angle: "更强调权限、数据表和发布运维。" },
       ]
     : [];
+  const extensions = [
+    "OmniAgent-style RAG 知识库 grounding",
+    "Agent 执行轨迹与评审证据",
+    "源码解释、复制和单文件导出",
+    "服务端 JSON 持久化，浏览器离线时自动降级",
+  ];
+  const infraPlan = [
+    { layer: "Frontend", detail: "React + Vite 负责 Atoms-like 构建工作台和 iframe 预览。" },
+    { layer: "API", detail: "Node 标准库 API 保存项目、知识库和构建记录。" },
+    { layer: "Proxy", detail: "nginx 独立二级域名接入，不复用 OmniAgent 端口。" },
+  ];
 
   const css = `
 :root { font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; color: #202124; background: #eef1f3; }
@@ -263,6 +361,7 @@ body { margin: 0; min-height: 100vh; background: #eef1f3; }
 .hero { display: flex; justify-content: space-between; gap: 18px; align-items: flex-start; }
 .hero h1 { margin: 0; font-size: 32px; letter-spacing: 0; }
 .hero p { margin: 10px 0 0; color: #64706b; max-width: 660px; line-height: 1.55; }
+.evidence { color: #24735a !important; font-size: 13px; }
 .primary { border: 0; border-radius: 999px; background: #20272b; color: #fff; padding: 12px 16px; font-weight: 800; cursor: pointer; }
 .metrics { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin-top: 24px; }
 .metric, .panel, .feature { border: 1px solid #dfe3e1; border-radius: 8px; background: #fff; }
@@ -333,6 +432,7 @@ document.querySelector(".primary").addEventListener("click", () => {
       <div>
         <h1>${safeTitle}</h1>
         <p>根据需求「${safePrompt}」生成的可交互产品原型。当前版本覆盖信息架构、主路径、关键指标和功能迭代入口。</p>
+        <p class="evidence">RAG evidence: ${knowledgeHits.map((hit) => escapeHtml(hit.title)).join(" · ") || "使用默认产品策略"}</p>
       </div>
       <button class="primary">派发 Agent 任务</button>
     </section>
@@ -384,6 +484,9 @@ document.querySelector(".primary").addEventListener("click", () => {
     js,
     srcDoc: html,
     alternatives,
+    knowledgeHits,
+    extensions,
+    infraPlan,
   };
 }
 
@@ -403,6 +506,11 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [currentBuildPrompt, setCurrentBuildPrompt] = useState("");
   const [projects, setProjects] = usePersistentState<Project[]>(storageKey, []);
+  const [knowledgeSources, setKnowledgeSources] = usePersistentState<KnowledgeSource[]>(
+    knowledgeKey,
+    defaultKnowledgeSources,
+  );
+  const [serverStatus, setServerStatus] = useState<"connecting" | "synced" | "local">("connecting");
   const [selectedProjectId, setSelectedProjectId] = usePersistentState<number | null>(
     "atoms-demo-he0yan-selected-project-v1",
     null,
@@ -425,6 +533,34 @@ function App() {
   }, []);
 
   useEffect(() => {
+    let ignore = false;
+
+    apiRequest<ServerState>("/api/state")
+      .then((state) => {
+        if (ignore) {
+          return;
+        }
+        if (state.projects?.length) {
+          setProjects(state.projects);
+          setSelectedProjectId(state.projects[0].id);
+        }
+        if (state.knowledgeSources?.length) {
+          setKnowledgeSources(state.knowledgeSources);
+        }
+        setServerStatus("synced");
+      })
+      .catch(() => {
+        if (!ignore) {
+          setServerStatus("local");
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, [setKnowledgeSources, setProjects, setSelectedProjectId]);
+
+  useEffect(() => {
     if (!isBuilding) {
       return;
     }
@@ -441,7 +577,7 @@ function App() {
       return;
     }
 
-    const generated = createGeneratedApp(currentBuildPrompt, workMode, raceMode);
+    const generated = createGeneratedApp(currentBuildPrompt, workMode, raceMode, knowledgeSources);
     const newProject: Project = {
       id: Date.now(),
       title: generated.title,
@@ -453,9 +589,36 @@ function App() {
     };
 
     setIsBuilding(false);
-    setProjects((items) => [newProject, ...items]);
+    setProjects((items) => {
+      const nextProjects = [newProject, ...items];
+      void syncServerState(nextProjects, knowledgeSources);
+      return nextProjects;
+    });
     setSelectedProjectId(newProject.id);
-  }, [currentBuildPrompt, isBuilding, progress, raceMode, setProjects, setSelectedProjectId, workMode]);
+  }, [
+    currentBuildPrompt,
+    isBuilding,
+    knowledgeSources,
+    progress,
+    raceMode,
+    setProjects,
+    setSelectedProjectId,
+    workMode,
+  ]);
+
+  function syncServerState(nextProjects = projects, nextKnowledgeSources = knowledgeSources) {
+    return apiRequest<ServerState>("/api/state", {
+      method: "POST",
+      body: JSON.stringify({ projects: nextProjects, knowledgeSources: nextKnowledgeSources }),
+    })
+      .then(() => setServerStatus("synced"))
+      .catch(() => setServerStatus("local"));
+  }
+
+  function saveKnowledgeSources(nextSources: KnowledgeSource[]) {
+    setKnowledgeSources(nextSources);
+    void syncServerState(projects, nextSources);
+  }
 
   function startBuild(nextPrompt = prompt) {
     const normalizedPrompt = nextPrompt.trim() || quickPrompts[0];
@@ -468,8 +631,8 @@ function App() {
   }
 
   function publishProject(projectId: number) {
-    setProjects((items) =>
-      items.map((project) =>
+    setProjects((items) => {
+      const nextProjects: Project[] = items.map((project) =>
         project.id === projectId
           ? {
               ...project,
@@ -478,8 +641,10 @@ function App() {
               updatedAt: "刚刚",
             }
           : project,
-      ),
-    );
+      );
+      void syncServerState(nextProjects, knowledgeSources);
+      return nextProjects;
+    });
   }
 
   function previewProject(projectId: number) {
@@ -535,6 +700,18 @@ function App() {
             label="资源"
             active={activeSection === "resources"}
             onClick={() => setActiveSection("resources")}
+          />
+          <NavItem
+            icon={Brain}
+            label="知识库"
+            active={activeSection === "knowledge"}
+            onClick={() => setActiveSection("knowledge")}
+          />
+          <NavItem
+            icon={FlaskConical}
+            label="差异"
+            active={activeSection === "compare"}
+            onClick={() => setActiveSection("compare")}
           />
           <NavItem
             icon={FolderKanban}
@@ -594,6 +771,9 @@ function App() {
         </div>
 
         <div className="top-tools">
+          <span className={`sync-pill ${serverStatus}`}>
+            {serverStatus === "synced" ? "服务端同步" : serverStatus === "connecting" ? "连接中" : "本地模式"}
+          </span>
           <button className="credit-pill">
             <Gem size={17} />
             <strong>{profile.credits}</strong>
@@ -633,6 +813,10 @@ function App() {
         )}
 
         {activeSection === "resources" && <ResourcesView />}
+        {activeSection === "knowledge" && (
+          <KnowledgeView knowledgeSources={knowledgeSources} onSaveKnowledgeSources={saveKnowledgeSources} />
+        )}
+        {activeSection === "compare" && <CompareView />}
         {activeSection === "projects" && (
           <ProjectsView
             projects={projects}
@@ -992,6 +1176,28 @@ function GeneratedSummary({
         </div>
       </div>
 
+      <div className="summary-column">
+        <span className="eyebrow">RAG Evidence</span>
+        <div className="knowledge-hit-list">
+          {project.generated.knowledgeHits.map((hit) => (
+            <div key={hit.title}>
+              <strong>{hit.title}</strong>
+              <span>{hit.score}%</span>
+              <small>{hit.excerpt}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="summary-column">
+        <span className="eyebrow">Platform Extensions</span>
+        <div className="extension-list">
+          {project.generated.extensions.map((item) => (
+            <span key={item}>{item}</span>
+          ))}
+        </div>
+      </div>
+
       {project.generated.alternatives.length > 0 && (
         <div className="summary-column">
           <span className="eyebrow">Race Mode</span>
@@ -1066,6 +1272,174 @@ function ResourcesView() {
           <Stat label="云额度" value="$26" icon={Cloud} />
           <Stat label="私有项目" value="3" icon={LockKeyhole} />
           <Stat label="自动化任务" value="8" icon={Zap} />
+        </div>
+      </div>
+    </section>
+  );
+}
+
+type KnowledgeViewProps = {
+  knowledgeSources: KnowledgeSource[];
+  onSaveKnowledgeSources: (sources: KnowledgeSource[]) => void;
+};
+
+function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources }: KnowledgeViewProps) {
+  const [draftTitle, setDraftTitle] = useState("ROOT/AI Native 评审关注点");
+  const [draftContent, setDraftContent] = useState(
+    "评审会关注完成度、工程思维、用户体验、创新性和可交付性。Demo 应展示真实交互、持久化、核心主流程和至少一个延展能力。",
+  );
+  const [draftTags, setDraftTags] = useState("ROOT,Review,Delivery");
+
+  function addSource() {
+    const title = draftTitle.trim();
+    const content = draftContent.trim();
+    if (!title || !content) {
+      return;
+    }
+
+    const nextSource: KnowledgeSource = {
+      id: Date.now(),
+      title,
+      content,
+      tags: draftTags
+        .split(/[,，]/)
+        .map((tag) => tag.trim())
+        .filter(Boolean),
+      updatedAt: "刚刚",
+    };
+    onSaveKnowledgeSources([nextSource, ...knowledgeSources]);
+    setDraftTitle("");
+    setDraftContent("");
+    setDraftTags("");
+  }
+
+  function removeSource(sourceId: number) {
+    onSaveKnowledgeSources(knowledgeSources.filter((source) => source.id !== sourceId));
+  }
+
+  return (
+    <section className="section-view">
+      <div className="section-heading with-action">
+        <div>
+          <span className="eyebrow">Knowledge Base</span>
+          <h1>增强型 RAG 知识库</h1>
+        </div>
+        <button className="primary-action" onClick={addSource}>
+          <Upload size={17} />
+          写入知识库
+        </button>
+      </div>
+
+      <div className="knowledge-layout">
+        <div className="knowledge-editor">
+          <label>
+            标题
+            <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
+          </label>
+          <label>
+            内容
+            <textarea value={draftContent} onChange={(event) => setDraftContent(event.target.value)} />
+          </label>
+          <label>
+            标签
+            <input value={draftTags} onChange={(event) => setDraftTags(event.target.value)} />
+          </label>
+        </div>
+
+        <div className="knowledge-explainer">
+          <span className="eyebrow">Borrowed From OmniAgent</span>
+          <h2>为什么加知识库</h2>
+          <p>
+            Atoms 更强调从自然语言快速生成应用；这里增加 RAG grounding，让 Agent 在生成前先检索内部资料、作业要求和产品规则，再把命中证据带到生成结果里。
+          </p>
+          <div className="infra-list">
+            <span>解析</span>
+            <span>切块</span>
+            <span>召回</span>
+            <span>证据聚合</span>
+            <span>生成</span>
+          </div>
+        </div>
+      </div>
+
+      <div className="knowledge-list">
+        {knowledgeSources.map((source) => (
+          <article key={source.id} className="knowledge-card">
+            <div>
+              <strong>{source.title}</strong>
+              <small>{source.updatedAt}</small>
+            </div>
+            <p>{source.content}</p>
+            <div className="tag-row">
+              {source.tags.map((tag) => (
+                <span key={tag}>{tag}</span>
+              ))}
+            </div>
+            <button aria-label="删除知识" onClick={() => removeSource(source.id)}>
+              <Trash2 size={16} />
+            </button>
+          </article>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+function CompareView() {
+  const rows = [
+    {
+      area: "核心体验",
+      atoms: "自然语言输入后由 Agent 生成应用，并提供视觉化预览。",
+      builder: "保留同类构建体验，同时把知识证据、执行轨迹和源码产物放在同一个工作台。",
+    },
+    {
+      area: "知识能力",
+      atoms: "偏通用生成与资源连接。",
+      builder: "新增 OmniAgent-style RAG：资料可写入知识库，构建结果展示召回证据。",
+    },
+    {
+      area: "工程交付",
+      atoms: "强调快速原型和发布。",
+      builder: "新增源码复制、HTML 导出、部署检查、服务端 JSON 持久化和 nginx 独立站点部署。",
+    },
+    {
+      area: "团队协作",
+      atoms: "多 Agent 形象化协作。",
+      builder: "增加 PM/架构/研究/工程/运维的决策日志，便于评审和复盘。",
+    },
+  ];
+
+  return (
+    <section className="section-view">
+      <div className="section-heading">
+        <span className="eyebrow">Atoms vs BuilderOS</span>
+        <h1>平台差异与扩展</h1>
+      </div>
+
+      <div className="compare-table">
+        {rows.map((row) => (
+          <article key={row.area}>
+            <strong>{row.area}</strong>
+            <div>
+              <span>Atoms</span>
+              <p>{row.atoms}</p>
+            </div>
+            <div>
+              <span>BuilderOS Demo</span>
+              <p>{row.builder}</p>
+            </div>
+          </article>
+        ))}
+      </div>
+
+      <div className="roadmap-panel">
+        <span className="eyebrow">Next Expansion</span>
+        <h2>继续投入时的优先级</h2>
+        <div className="roadmap-grid">
+          <span>1. 接入真实 LLM 代码生成 API</span>
+          <span>2. 将 RAG 从关键词召回升级为向量检索</span>
+          <span>3. 增加沙箱构建与在线预览容器</span>
+          <span>4. 接入 GitHub PR、Vercel/自托管发布流水线</span>
         </div>
       </div>
     </section>

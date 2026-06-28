@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ReactNode } from "react";
 import {
   Activity,
+  ArrowLeft,
   ArrowRight,
   ArrowUp,
   AudioLines,
@@ -56,6 +56,7 @@ import type { LucideIcon } from "lucide-react";
 
 type Section = "home" | "resources" | "knowledge" | "data" | "compare" | "projects";
 type WorkMode = "build" | "research" | "video";
+type AuthIntent = "login" | "signup";
 
 type Project = {
   id: number;
@@ -545,6 +546,7 @@ function App() {
   const [activeSection, setActiveSection] = useState<Section>("home");
   const [profile, setProfile] = usePersistentState<WorkspaceProfile>(profileKey, defaultProfile);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [authIntent, setAuthIntent] = useState<AuthIntent | null>(null);
   const [startAfterSignup, setStartAfterSignup] = useState(false);
   const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workMode, setWorkMode] = useState<WorkMode>("build");
@@ -824,12 +826,13 @@ function App() {
     }
 
     setStartAfterSignup(shouldStartAfterSignup);
-    setOnboardingOpen(true);
+    setAuthIntent(shouldStartAfterSignup ? "signup" : "login");
   }
 
   function saveProfile(nextProfile: WorkspaceProfile) {
     setProfile({ ...nextProfile, registeredAt: nextProfile.registeredAt || new Date().toISOString() });
     setWorkspaceOpen(true);
+    setAuthIntent(null);
     setOnboardingOpen(false);
 
     if (startAfterSignup) {
@@ -839,28 +842,35 @@ function App() {
   }
 
   if (!workspaceOpen) {
+    if (authIntent) {
+      return (
+        <AuthPage
+          intent={authIntent}
+          profile={profile}
+          onBack={() => {
+            setStartAfterSignup(false);
+            setAuthIntent(null);
+          }}
+          onSave={saveProfile}
+        />
+      );
+    }
+
     return (
       <PublicLanding
         activeAgents={agents}
         prompt={prompt}
-        onLogin={() => requestSignup(false)}
+        onLogin={() => {
+          setStartAfterSignup(false);
+          setAuthIntent("login");
+        }}
         onPromptChange={setPrompt}
-        onSignup={() => requestSignup(false)}
+        onSignup={() => {
+          setStartAfterSignup(false);
+          setAuthIntent("signup");
+        }}
         onStart={() => requestSignup(true)}
-      >
-        {onboardingOpen && (
-          <OnboardingModal
-            canClose
-            registrationRequired={registrationRequired}
-            profile={profile}
-            onClose={() => {
-              setStartAfterSignup(false);
-              setOnboardingOpen(false);
-            }}
-            onSave={saveProfile}
-          />
-        )}
-      </PublicLanding>
+      />
     );
   }
 
@@ -1057,7 +1067,6 @@ function App() {
 
 type PublicLandingProps = {
   activeAgents: Agent[];
-  children?: ReactNode;
   prompt: string;
   onLogin: () => void;
   onPromptChange: (value: string) => void;
@@ -1067,13 +1076,23 @@ type PublicLandingProps = {
 
 function PublicLanding({
   activeAgents,
-  children,
   prompt,
   onLogin,
   onPromptChange,
   onSignup,
   onStart,
 }: PublicLandingProps) {
+  const [resourceOpen, setResourceOpen] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const resourceItems = [
+    { icon: FileText, label: "产品文档", meta: "平台能力、API 与部署流程" },
+    { icon: PackageOpen, label: "模板案例", meta: "SaaS、后台、增长页与内部工具" },
+    { icon: Activity, label: "Agent 运行示例", meta: "查看任务拆解和执行轨迹" },
+    { icon: PlugZap, label: "连接器", meta: "GitHub、数据库、支付与分析" },
+    { icon: MessageCircle, label: "帮助中心", meta: "常见问题和构建建议" },
+    { icon: Users, label: "社区", meta: "和 Builder 一起交流工作流" },
+  ];
+
   return (
     <main className="landing-page">
       <nav className="landing-nav" aria-label="公开导航">
@@ -1087,10 +1106,58 @@ function PublicLanding({
         </div>
         <div className="landing-links">
           <button>方案</button>
-          <button>
-            资源
-            <ChevronDown size={18} />
-          </button>
+          <div className="landing-resource-wrap">
+            <button
+              className={resourceOpen ? "resource-trigger active" : "resource-trigger"}
+              aria-expanded={resourceOpen}
+              onClick={() => {
+                setUnlockOpen(false);
+                setResourceOpen((value) => !value);
+              }}
+            >
+              资源
+              <ChevronDown size={18} />
+            </button>
+            {resourceOpen && (
+              <div className="resource-mega" role="menu">
+                <div className="resource-menu-list">
+                  {resourceItems.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.label}
+                        role="menuitem"
+                        onClick={() => {
+                          setResourceOpen(false);
+                          setUnlockOpen(true);
+                        }}
+                      >
+                        <Icon size={18} />
+                        <span>
+                          {item.label}
+                          <small>{item.meta}</small>
+                        </span>
+                      </button>
+                    );
+                  })}
+                </div>
+                <article className="resource-feature">
+                  <span className="eyebrow">Featured Run</span>
+                  <h2>用 RAG 知识库生成一个可审查后台</h2>
+                  <p>示例展示 Agent 如何从资料召回证据、拆解需求、生成页面，并保留部署检查记录。</p>
+                  <button
+                    onClick={() => {
+                      setResourceOpen(false);
+                      setUnlockOpen(true);
+                    }}
+                  >
+                    查看示例
+                    <ArrowRight size={16} />
+                  </button>
+                </article>
+              </div>
+            )}
+          </div>
         </div>
         <div className="landing-actions">
           <button className="landing-login" onClick={onLogin}>
@@ -1134,7 +1201,14 @@ function PublicLanding({
             onChange={(event) => onPromptChange(event.target.value)}
           />
           <div className="landing-composer-footer">
-            <button className="landing-dot" aria-label="添加上下文">
+            <button
+              className={unlockOpen ? "landing-dot active" : "landing-dot"}
+              aria-label="添加上下文"
+              onClick={() => {
+                setResourceOpen(false);
+                setUnlockOpen((value) => !value);
+              }}
+            >
               <Sparkles size={18} />
             </button>
             <button className="landing-start" onClick={onStart}>
@@ -1142,10 +1216,158 @@ function PublicLanding({
               <ArrowRight size={19} />
             </button>
           </div>
+          {unlockOpen && (
+            <div className="unlock-popover" role="dialog" aria-label="登录解锁 BuilderOS 能力">
+              <button className="unlock-close" aria-label="关闭" onClick={() => setUnlockOpen(false)}>
+                <X size={16} />
+              </button>
+              <LockKeyhole size={20} />
+              <h2>登录解锁更多构建能力</h2>
+              <p>上传资料、接入知识库、配置连接器，并保留每次 Agent 执行轨迹和部署记录。</p>
+              <div>
+                <span>文件与资料</span>
+                <span>RAG 知识库</span>
+                <span>第三方连接器</span>
+              </div>
+              <button className="unlock-action" onClick={onLogin}>
+                登录继续
+              </button>
+            </div>
+          )}
         </div>
       </section>
+    </main>
+  );
+}
 
-      {children}
+type AuthPageProps = {
+  intent: AuthIntent;
+  profile: WorkspaceProfile;
+  onBack: () => void;
+  onSave: (profile: WorkspaceProfile) => void;
+};
+
+function AuthPage({ intent, profile, onBack, onSave }: AuthPageProps) {
+  const [draft, setDraft] = useState<WorkspaceProfile>({
+    ...defaultProfile,
+    ...profile,
+    name: profile.name || "",
+    email: profile.email || "",
+    goal: profile.goal || defaultProfile.goal,
+  });
+  const canSubmit = draft.name.trim().length >= 2 && /\S+@\S+\.\S+/.test(draft.email.trim());
+  const title = intent === "login" ? "登录 BuilderOS" : "创建 BuilderOS 工作区";
+
+  function submit() {
+    if (!canSubmit) {
+      return;
+    }
+
+    onSave({
+      ...draft,
+      name: draft.name.trim(),
+      email: draft.email.trim(),
+      credits: draft.credits || 70,
+    });
+  }
+
+  return (
+    <main className="auth-page">
+      <button className="auth-back" aria-label="返回首页" onClick={onBack}>
+        <ArrowLeft size={22} />
+      </button>
+
+      <section className="auth-form-panel" aria-label={title}>
+        <div className="auth-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <span>BuilderOS</span>
+        </div>
+        <h1>{title}</h1>
+        <p>开始使用 Agent 团队构建可运行、可审查、可部署的 AI Native 应用。</p>
+
+        <button
+          className="google-auth"
+          type="button"
+          onClick={() =>
+            setDraft((value) => ({
+              ...value,
+              name: value.name || "Builder Team",
+              email: value.email || "builder@example.com",
+            }))
+          }
+        >
+          <Globe2 size={18} />
+          使用 Google 继续
+        </button>
+
+        <div className="auth-separator">
+          <span />
+          或
+          <span />
+        </div>
+
+        <label>
+          工作区名称
+          <input
+            value={draft.name}
+            placeholder="输入你的名字或团队名"
+            onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
+          />
+        </label>
+        <label>
+          电子邮箱
+          <input
+            value={draft.email}
+            placeholder="用于登录和归属工作区"
+            onChange={(event) => setDraft((value) => ({ ...value, email: event.target.value }))}
+          />
+        </label>
+
+        <p className="auth-terms">继续即表示同意 BuilderOS 的服务条款与隐私政策。</p>
+        <button className="auth-submit" disabled={!canSubmit} onClick={submit}>
+          {intent === "login" ? "登录并进入" : "创建并进入"}
+        </button>
+      </section>
+
+      <section className="auth-value-panel" aria-label="BuilderOS 价值说明">
+        <div className="auth-value-card">
+          <div className="auth-value-brand">
+            <div className="brand-mark light" aria-hidden="true">
+              <span />
+              <span />
+              <span />
+            </div>
+            <span>BuilderOS</span>
+          </div>
+          <h2>把需求变成可运行的 AI 应用</h2>
+          <ul>
+            <li>
+              <CheckCircle2 size={18} />
+              几分钟生成可预览应用，而不是停留在静态概念
+            </li>
+            <li>
+              <CheckCircle2 size={18} />
+              RAG 知识库取证，输出带来源和可信度
+            </li>
+            <li>
+              <CheckCircle2 size={18} />
+              Agent 执行轨迹可回放，方便复盘和评审
+            </li>
+            <li>
+              <CheckCircle2 size={18} />
+              源码可审查，可下载，可继续二次开发
+            </li>
+            <li>
+              <CheckCircle2 size={18} />
+              部署检查和服务状态一起纳入交付闭环
+            </li>
+          </ul>
+        </div>
+      </section>
     </main>
   );
 }

@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 import {
   Activity,
+  ArrowRight,
   ArrowUp,
   AudioLines,
   BarChart3,
@@ -543,6 +545,8 @@ function App() {
   const [activeSection, setActiveSection] = useState<Section>("home");
   const [profile, setProfile] = usePersistentState<WorkspaceProfile>(profileKey, defaultProfile);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
+  const [startAfterSignup, setStartAfterSignup] = useState(false);
+  const [workspaceOpen, setWorkspaceOpen] = useState(false);
   const [workMode, setWorkMode] = useState<WorkMode>("build");
   const [teamMode, setTeamMode] = useState(true);
   const [deepResearch, setDeepResearch] = useState(false);
@@ -763,6 +767,7 @@ function App() {
     setCurrentBuildPrompt(normalizedPrompt);
     setProgress(8);
     setIsBuilding(true);
+    setWorkspaceOpen(true);
     setActiveSection("home");
     setProfile((current) => ({ ...current, credits: Math.max(0, current.credits - (raceMode ? 8 : 3)) }));
   }
@@ -807,6 +812,56 @@ function App() {
     if (mode === "video") {
       setDeepResearch(false);
     }
+  }
+
+  function requestSignup(shouldStartAfterSignup = false) {
+    if (!registrationRequired) {
+      setWorkspaceOpen(true);
+      if (shouldStartAfterSignup) {
+        window.setTimeout(() => startBuild(prompt), 0);
+      }
+      return;
+    }
+
+    setStartAfterSignup(shouldStartAfterSignup);
+    setOnboardingOpen(true);
+  }
+
+  function saveProfile(nextProfile: WorkspaceProfile) {
+    setProfile({ ...nextProfile, registeredAt: nextProfile.registeredAt || new Date().toISOString() });
+    setWorkspaceOpen(true);
+    setOnboardingOpen(false);
+
+    if (startAfterSignup) {
+      setStartAfterSignup(false);
+      window.setTimeout(() => startBuild(prompt), 0);
+    }
+  }
+
+  if (!workspaceOpen) {
+    return (
+      <PublicLanding
+        activeAgents={agents}
+        prompt={prompt}
+        onLogin={() => requestSignup(false)}
+        onPromptChange={setPrompt}
+        onSignup={() => requestSignup(false)}
+        onStart={() => requestSignup(true)}
+      >
+        {onboardingOpen && (
+          <OnboardingModal
+            canClose
+            registrationRequired={registrationRequired}
+            profile={profile}
+            onClose={() => {
+              setStartAfterSignup(false);
+              setOnboardingOpen(false);
+            }}
+            onSave={saveProfile}
+          />
+        )}
+      </PublicLanding>
+    );
   }
 
   return (
@@ -984,6 +1039,7 @@ function App() {
 
         {(registrationRequired || onboardingOpen) && (
           <OnboardingModal
+            canClose
             registrationRequired={registrationRequired}
             profile={profile}
             onClose={() => {
@@ -991,14 +1047,97 @@ function App() {
                 setOnboardingOpen(false);
               }
             }}
-            onSave={(nextProfile) => {
-              setProfile({ ...nextProfile, registeredAt: nextProfile.registeredAt || new Date().toISOString() });
-              setOnboardingOpen(false);
-            }}
+            onSave={saveProfile}
           />
         )}
       </main>
     </div>
+  );
+}
+
+type PublicLandingProps = {
+  activeAgents: Agent[];
+  children?: ReactNode;
+  prompt: string;
+  onLogin: () => void;
+  onPromptChange: (value: string) => void;
+  onSignup: () => void;
+  onStart: () => void;
+};
+
+function PublicLanding({
+  activeAgents,
+  children,
+  prompt,
+  onLogin,
+  onPromptChange,
+  onSignup,
+  onStart,
+}: PublicLandingProps) {
+  return (
+    <main className="landing-page">
+      <nav className="landing-nav" aria-label="公开导航">
+        <div className="landing-brand">
+          <div className="brand-mark" aria-hidden="true">
+            <span />
+            <span />
+            <span />
+          </div>
+          <span className="brand-name">BuilderOS</span>
+        </div>
+        <div className="landing-links">
+          <button>定价</button>
+          <button>
+            资源
+            <ChevronDown size={18} />
+          </button>
+        </div>
+        <div className="landing-actions">
+          <button className="landing-login" onClick={onLogin}>
+            登录
+          </button>
+          <button className="landing-signup" onClick={onSignup}>
+            注册
+          </button>
+        </div>
+      </nav>
+
+      <section className="landing-hero" aria-label="BuilderOS 首页">
+        <div className="landing-agent-stack" aria-label="BuilderOS 智能体团队">
+          {activeAgents.map((agent) => {
+            const Icon = agent.icon;
+            return (
+              <span key={agent.name} className="landing-agent" style={{ backgroundColor: agent.color }}>
+                <Icon size={20} />
+              </span>
+            );
+          })}
+        </div>
+
+        <h1>把想法变成可发布的产品</h1>
+        <p>AI Agent 帮你验证需求、生成应用、连接知识库并交付可预览版本。几分钟内完成，无需从空白项目开始。</p>
+
+        <div className="landing-composer">
+          <textarea
+            aria-label="描述你想构建的产品"
+            value={prompt}
+            placeholder="描述你想构建的产品、页面或自动化流程。"
+            onChange={(event) => onPromptChange(event.target.value)}
+          />
+          <div className="landing-composer-footer">
+            <button className="landing-dot" aria-label="添加上下文">
+              <Sparkles size={18} />
+            </button>
+            <button className="landing-start" onClick={onStart}>
+              开始
+              <ArrowRight size={19} />
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {children}
+    </main>
   );
 }
 
@@ -1825,13 +1964,14 @@ function ProjectsView({ projects, onDownloadProject, onPreviewProject, onPublish
 }
 
 type OnboardingModalProps = {
+  canClose?: boolean;
   profile: WorkspaceProfile;
   registrationRequired: boolean;
   onClose: () => void;
   onSave: (profile: WorkspaceProfile) => void;
 };
 
-function OnboardingModal({ profile, registrationRequired, onClose, onSave }: OnboardingModalProps) {
+function OnboardingModal({ canClose = false, profile, registrationRequired, onClose, onSave }: OnboardingModalProps) {
   const [draft, setDraft] = useState<WorkspaceProfile>({
     ...defaultProfile,
     ...profile,
@@ -1848,7 +1988,7 @@ function OnboardingModal({ profile, registrationRequired, onClose, onSave }: Onb
             <span className="eyebrow">BuilderOS Signup</span>
             <h2>{registrationRequired ? "创建你的 BuilderOS 工作区" : "工作区设置"}</h2>
           </div>
-          {!registrationRequired && (
+          {canClose && (
             <button className="circle-button" aria-label="关闭" onClick={onClose}>
               <X size={18} />
             </button>

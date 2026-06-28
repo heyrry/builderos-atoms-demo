@@ -1086,7 +1086,7 @@ function PublicLanding({
           <span className="brand-name">BuilderOS</span>
         </div>
         <div className="landing-links">
-          <button>定价</button>
+          <button>方案</button>
           <button>
             资源
             <ChevronDown size={18} />
@@ -1096,8 +1096,9 @@ function PublicLanding({
           <button className="landing-login" onClick={onLogin}>
             登录
           </button>
-          <button className="landing-signup" onClick={onSignup}>
-            注册
+          <button className="landing-signup" onClick={onSignup} aria-label="进入工作区">
+            <span>进入工作区</span>
+            <ArrowRight size={17} />
           </button>
         </div>
       </nav>
@@ -1114,14 +1115,22 @@ function PublicLanding({
           })}
         </div>
 
-        <h1>把想法变成可发布的产品</h1>
-        <p>AI Agent 帮你验证需求、生成应用、连接知识库并交付可预览版本。几分钟内完成，无需从空白项目开始。</p>
+        <span className="landing-eyebrow">AI Native Builder Platform</span>
+        <h1>把需求变成可运行的 AI 应用</h1>
+        <p>BuilderOS 让 Agent 团队完成需求拆解、知识库取证、代码生成、预览与部署。每次构建都有执行轨迹和可审查源码。</p>
+
+        <div className="landing-capabilities" aria-label="核心能力">
+          <span>RAG 取证</span>
+          <span>执行轨迹</span>
+          <span>源码预览</span>
+          <span>部署检查</span>
+        </div>
 
         <div className="landing-composer">
           <textarea
-            aria-label="描述你想构建的产品"
+            aria-label="描述你要构建的 AI 应用"
             value={prompt}
-            placeholder="描述你想构建的产品、页面或自动化流程。"
+            placeholder="描述应用目标、业务规则、数据来源或内部知识库。"
             onChange={(event) => onPromptChange(event.target.value)}
           />
           <div className="landing-composer-footer">
@@ -1129,7 +1138,7 @@ function PublicLanding({
               <Sparkles size={18} />
             </button>
             <button className="landing-start" onClick={onStart}>
-              开始
+              开始构建
               <ArrowRight size={19} />
             </button>
           </div>

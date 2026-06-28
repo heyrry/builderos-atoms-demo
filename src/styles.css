@@ -1591,6 +1591,13 @@ button {
   background: var(--blue);
 }
 
+.primary-action:disabled {
+  cursor: not-allowed;
+  background: #b9c0d8;
+  color: #f4f5fb;
+  box-shadow: none;
+}
+
 .empty-state {
   display: grid;
   min-height: 420px;

@@ -90,6 +90,7 @@ type WorkspaceProfile = {
   email: string;
   goal: string;
   credits: number;
+  registeredAt?: string;
 };
 
 type RunRecord = {
@@ -190,14 +191,14 @@ const quickPrompts = [
 ];
 
 const initialPrompt = "请描述你要构建的产品、页面、数据、连接器或增长任务。";
-const candidateName = "he0yan";
-const storageKey = "atoms-demo-he0yan-projects-v1";
-const profileKey = "atoms-demo-he0yan-profile-v1";
-const knowledgeKey = "atoms-demo-he0yan-knowledge-v1";
+const candidateName = "BuilderOS";
+const storageKey = "atoms-demo-builderos-projects-v2";
+const profileKey = "atoms-demo-builderos-profile-v2";
+const knowledgeKey = "atoms-demo-builderos-knowledge-v2";
 const defaultProfile: WorkspaceProfile = {
-  name: "he0yan",
+  name: "",
   email: "",
-  goal: "在 48 小时内完成一个可运行的 Atoms Demo",
+  goal: "用 BuilderOS 构建一个 AI Native 应用",
   credits: 70,
 };
 
@@ -541,7 +542,7 @@ document.querySelector(".primary").addEventListener("click", () => {
 function App() {
   const [activeSection, setActiveSection] = useState<Section>("home");
   const [profile, setProfile] = usePersistentState<WorkspaceProfile>(profileKey, defaultProfile);
-  const [onboardingOpen, setOnboardingOpen] = useState(() => !window.localStorage.getItem(profileKey));
+  const [onboardingOpen, setOnboardingOpen] = useState(false);
   const [workMode, setWorkMode] = useState<WorkMode>("build");
   const [teamMode, setTeamMode] = useState(true);
   const [deepResearch, setDeepResearch] = useState(false);
@@ -554,7 +555,7 @@ function App() {
   const [progress, setProgress] = useState(0);
   const [currentBuildPrompt, setCurrentBuildPrompt] = useState("");
   const [projects, setProjects] = usePersistentState<Project[]>(storageKey, []);
-  const [runRecords, setRunRecords] = usePersistentState<RunRecord[]>("atoms-demo-he0yan-runs-v1", []);
+  const [runRecords, setRunRecords] = usePersistentState<RunRecord[]>("atoms-demo-builderos-runs-v2", []);
   const [knowledgeSources, setKnowledgeSources] = usePersistentState<KnowledgeSource[]>(
     knowledgeKey,
     defaultKnowledgeSources,
@@ -563,11 +564,13 @@ function App() {
   const [platformStatus, setPlatformStatus] = useState<PlatformStatus | null>(null);
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = usePersistentState<number | null>(
-    "atoms-demo-he0yan-selected-project-v1",
+    "atoms-demo-builderos-selected-project-v2",
     null,
   );
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
+  const registrationRequired = !profile.registeredAt;
+  const displayName = profile.name.trim() || "Builder";
 
   const activeAgents = useMemo(() => {
     if (!teamMode) {
@@ -580,7 +583,7 @@ function App() {
   }, [deepResearch, teamMode, workMode]);
 
   useEffect(() => {
-    document.title = `Atoms Demo - ${candidateName}`;
+    document.title = candidateName;
   }, []);
 
   useEffect(() => {
@@ -822,8 +825,8 @@ function App() {
         </div>
 
         <button className="workspace-switch" onClick={() => setOnboardingOpen(true)}>
-          <span className="workspace-avatar">{profile.name.slice(0, 1).toUpperCase()}</span>
-          <span>{profile.name}'s BuilderOS</span>
+          <span className="workspace-avatar">{displayName.slice(0, 1).toUpperCase()}</span>
+          <span>{displayName}'s BuilderOS</span>
           <ChevronDown size={16} />
         </button>
 
@@ -935,7 +938,7 @@ function App() {
             raceMode={raceMode}
             selectedProject={selectedProject}
             teamMode={teamMode}
-            ownerName={profile.name}
+            ownerName={displayName}
             workMode={workMode}
             onDownloadProject={downloadProject}
             onPromptChange={setPrompt}
@@ -979,12 +982,17 @@ function App() {
           <MessageCircle size={24} />
         </button>
 
-        {onboardingOpen && (
+        {(registrationRequired || onboardingOpen) && (
           <OnboardingModal
+            registrationRequired={registrationRequired}
             profile={profile}
-            onClose={() => setOnboardingOpen(false)}
+            onClose={() => {
+              if (!registrationRequired) {
+                setOnboardingOpen(false);
+              }
+            }}
             onSave={(nextProfile) => {
-              setProfile(nextProfile);
+              setProfile({ ...nextProfile, registeredAt: nextProfile.registeredAt || new Date().toISOString() });
               setOnboardingOpen(false);
             }}
           />
@@ -1818,24 +1826,33 @@ function ProjectsView({ projects, onDownloadProject, onPreviewProject, onPublish
 
 type OnboardingModalProps = {
   profile: WorkspaceProfile;
+  registrationRequired: boolean;
   onClose: () => void;
   onSave: (profile: WorkspaceProfile) => void;
 };
 
-function OnboardingModal({ profile, onClose, onSave }: OnboardingModalProps) {
-  const [draft, setDraft] = useState(profile);
+function OnboardingModal({ profile, registrationRequired, onClose, onSave }: OnboardingModalProps) {
+  const [draft, setDraft] = useState<WorkspaceProfile>({
+    ...defaultProfile,
+    ...profile,
+    name: profile.name || "",
+    goal: profile.goal || defaultProfile.goal,
+  });
+  const canSubmit = draft.name.trim().length >= 2 && /\S+@\S+\.\S+/.test(draft.email.trim());
 
   return (
     <div className="modal-backdrop" role="dialog" aria-modal="true" aria-label="初始化工作区">
       <div className="onboarding-modal">
         <div className="modal-header">
           <div>
-            <span className="eyebrow">Workspace Setup</span>
-            <h2>初始化你的 Builder 工作区</h2>
+            <span className="eyebrow">BuilderOS Signup</span>
+            <h2>{registrationRequired ? "创建你的 BuilderOS 工作区" : "工作区设置"}</h2>
           </div>
-          <button className="circle-button" aria-label="关闭" onClick={onClose}>
-            <X size={18} />
-          </button>
+          {!registrationRequired && (
+            <button className="circle-button" aria-label="关闭" onClick={onClose}>
+              <X size={18} />
+            </button>
+          )}
         </div>
 
         <div className="setup-grid">
@@ -1843,14 +1860,15 @@ function OnboardingModal({ profile, onClose, onSave }: OnboardingModalProps) {
             昵称
             <input
               value={draft.name}
-              onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value || candidateName }))}
+              placeholder="输入你的名字或团队名"
+              onChange={(event) => setDraft((value) => ({ ...value, name: event.target.value }))}
             />
           </label>
           <label>
             邮箱
             <input
               value={draft.email}
-              placeholder="用于模拟注册和工作区归属"
+              placeholder="用于注册和工作区归属"
               onChange={(event) => setDraft((value) => ({ ...value, email: event.target.value }))}
             />
           </label>
@@ -1870,10 +1888,21 @@ function OnboardingModal({ profile, onClose, onSave }: OnboardingModalProps) {
         </div>
 
         <div className="modal-actions">
-          <button onClick={() => onSave(defaultProfile)}>重置</button>
-          <button className="primary-action" onClick={() => onSave({ ...draft, credits: draft.credits || 70 })}>
+          <button onClick={() => setDraft(defaultProfile)}>重置</button>
+          <button
+            className="primary-action"
+            disabled={!canSubmit}
+            onClick={() =>
+              onSave({
+                ...draft,
+                name: draft.name.trim(),
+                email: draft.email.trim(),
+                credits: draft.credits || 70,
+              })
+            }
+          >
             <Sparkles size={17} />
-            进入工作区
+            {registrationRequired ? "创建并进入" : "保存设置"}
           </button>
         </div>
       </div>

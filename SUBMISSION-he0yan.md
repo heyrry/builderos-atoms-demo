@@ -6,6 +6,8 @@
 
 产品定位：Atoms 偏“输入想法后自动生成产品”，BuilderOS 在这个基础上额外强调“过程可见、Agent 可配置、执行可审查”。因此本次 Demo 除了实现 Atoms-like 的首页生成体验，还吸收了我另一套 OmniAgent 平台中的 Agent 编排思路，把隐式多智能体工作流做成显式自由编排能力：评委可以看到每个 Agent 的角色、系统提示词、模型路由、工具、输入输出、Guardrail 和执行 Trace。
 
+相对 Atoms，BuilderOS 重点扩展了三类能力：第一是显式 Agent 编排，把自动化 Agent 链路变成可配置、可审查的工作流；第二是知识 grounding，把知识库、文件解析和 RAG 证据作为生成结果的依据；第三是运行审计与可观测性，把 API 健康、服务状态、持久化路径、运行记录和 Agent Orchestrator 状态通过实时数据页暴露出来。换句话说，Atoms 强在自动生成和自动配置，BuilderOS 希望把生成过程、知识依据、Agent 调度和运行状态做成可复盘的 Builder 控制台。
+
 标题：Atoms Demo - he0yan
 
 ## 2. 已部署的可测试链接
@@ -27,7 +29,7 @@
 4. 打开文件视图，查看 `app/frontend/src/App.tsx`、`src/styles.css`、`src/data/generated.ts` 等生成文件。
 5. 点击源码包下载，验证平台会生成完整项目文件夹和 manifest。
 6. 点击发布，打开 `/api/preview/:id` 的公开预览链接。
-7. 进入资源、知识库、实时数据、差异页面，查看持久化状态、服务健康度和后续扩展方向；知识库页面支持上传 `.txt / .md / .csv / .json`，服务端会解析文本并生成可召回知识条目。
+7. 进入资源、知识库、实时数据、差异页面，查看 BuilderOS 相对 Atoms 的扩展能力：知识库负责 grounding 和文件解析，实时数据负责运行审计、服务健康和持久化状态；知识库页面支持上传 `.txt / .md / .csv / .json`，服务端会解析文本并生成可召回知识条目。
 8. 进入“编排”页面，体验 OmniAgent 风格的 Agent 链路：查看任务说明、垂直任务流程、任务结果三栏工作台；点击“试运行链路”会由后端按预定义 Agent 链真实调用 LLM，并基于服务端知识库中的简历数据生成候选人推荐结果。
 
 ## 5. 重点亮点：流程编排与 Agent 调度
@@ -111,10 +113,10 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 - 新增真实发布预览：发布后写入发布状态、发布检查和可访问 URL，`/api/preview/:id` 可直接打开生成应用。
 - 新增 BuilderOS Cloud 资源台：对标 Atoms Cloud 的 AI、Database、Users、Secrets、App Storage、GitHub、Stripe、Growth 能力，支持连接状态持久化。
 - 新增 Agent 编排运行时：参考 OmniAgent 的 Agent 编排能力，提供招聘多 Agent 模板，支持三栏执行工作台、编辑执行链、保存配置、后端真实 LLM 调度和知识库 grounding。
-- 新增 BuilderOS 增强型 RAG 知识库页面，支持手动写入和 `.txt / .md / .csv / .json` 文件解析，生成和编排时召回资料并展示证据。
+- 新增 BuilderOS 增强型 RAG 知识库页面：这是相对 Atoms 的知识 grounding 扩展，支持手动写入和 `.txt / .md / .csv / .json` 文件解析，生成和编排时召回资料并展示证据，避免结果变成无来源的静态 mock。
 - 生产环境使用 MySQL 保存用户和 session，使用 Node API 保存项目、知识库、构建运行记录和项目文件 manifest，浏览器离线或 API 不可用时降级到 `localStorage`。
 - 生产环境将生成文件落盘到 `/opt/builderos/data/generated-projects/project-<id>/`，并提供 `/api/projects/:id/files` 查询。
-- 新增实时数据页，展示 BuilderOS API、Auth Store、Build Engine、RAG Engine、服务端进程、持久化文件和最近构建记录。
+- 新增实时数据页：这是相对 Atoms 的运行审计与可观测性扩展，展示 BuilderOS API、Auth Store、Build Engine、RAG Engine、Agent Orchestrator、服务端进程、持久化文件和最近构建记录，证明平台有真实后端和可追踪状态。
 - 新增 `/api/llm/status` 和构建记录中的模型元数据，评审可看到本次构建使用真实 LLM 还是模板降级。
 - Race Mode 作为延展能力：开启后生成多个方案方向和评分，体现多模型/多方案竞争的产品思路。
 - 新增“平台差异与扩展”页面，说明相对 Atoms 增加的 grounding、源码交付、执行轨迹和部署检查能力。
@@ -175,6 +177,8 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 - API 状态：`/api/status` 当前返回 healthy，存储目录为 `/opt/builderos/data`。
 - LLM 状态：`/api/llm/status` 当前为 real mode，主路由为通义千问 `qwen-plus`，第三方平台 provider 为 `token-qiv.cn / gpt-5.5`；顶部模型路由选择器可手动切到 `gpt-5.5` 并在 `token-qiv.cn` 看到请求记录。
 - 持久化：用户和 session 走 MySQL；项目、知识库、文件解析结果、运行记录和生成文件 manifest 走服务端数据目录。
+- 知识 grounding：知识库不是静态展示页，而是构建和 Agent 编排的召回来源；上传文件会解析为知识条目，简历类资料会自动打标签并参与候选人筛选。
+- 运行审计：实时数据页不是装饰性 dashboard，而是把服务健康、运行记录、RAG/Build/Agent Orchestrator 状态和持久化路径显式暴露给评委。
 - 延展能力：`编排` 页面提供预定义 Agent 链真实执行，配置写入服务端 state，运行结果来自 LLM 调用和知识库简历，实时数据页显示 Agent Orchestrator 健康状态。
 - 生成文件：生产环境落盘到 `/opt/builderos/data/generated-projects/project-<id>/`，并可通过 zip 下载。
 

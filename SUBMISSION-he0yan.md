@@ -167,6 +167,7 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 - 真实 GitHub 同步
 - 真实云发布
 - 第三方 OAuth 和团队权限
+- 多知识库管理：先新建知识库，再在每个知识库下上传资料，并在构建 / Agent 编排时选择召回范围
 - 向量数据库级 RAG、embedding、rerank
 - PDF/DOCX 文件解析、页码引用和段落级来源追踪
 - 拖拽式自由编排、DAG 分支、节点重试和人工确认
@@ -186,8 +187,8 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 
 1. 沙箱执行优先：接入隔离容器，真实运行 `npm install`、`npm run build` 和自动修错循环，让平台从“生成代码”升级为“生成并验证代码”。
 2. 显式自由编排增强：把当前串行 Agent 链升级为可拖拽 DAG，补充分支条件、失败重试、人工确认、节点级超时、节点级模型成本和审计日志。这是 BuilderOS 区别于 Atoms 的重点方向，也承接 OmniAgent 的自由编排优势。
-3. GitHub 与发布流水线：接入 GitHub OAuth，支持一键创建仓库、提交生成文件、打开 PR；再接入 Vercel 或 Cloudflare Pages API，把当前 `/api/preview/:id` 升级为真实部署。
-4. RAG 增强：当前版本是 keyword RAG + 文件解析；下一步升级 embeddings + 向量数据库 + rerank，并补充 PDF/DOCX 解析、页码引用和段落级来源追踪。
+3. RAG 信息架构升级：当前版本是单工作区知识池，已经支持 keyword RAG + 文件解析；下一步先升级为“多个知识库 / 每库多资料 / 构建或编排时选择召回范围”，再升级 embeddings + 向量数据库 + rerank，并补充 PDF/DOCX 解析、页码引用和段落级来源追踪。
+4. GitHub 与发布流水线：接入 GitHub OAuth，支持一键创建仓库、提交生成文件、打开 PR；再接入 Vercel 或 Cloudflare Pages API，把当前 `/api/preview/:id` 升级为真实部署。
 5. 计费与积分系统：当前 Demo 积分不做限制，只用于展示。后续会设计完整账务闭环：模型调用按 provider/model 记录 token、延迟和成本；构建、Agent 编排、文件解析、发布等动作生成 usage ledger；用户可通过 Stripe/支付宝/微信或企业转账充值；充值写入 balance ledger，消费按额度扣减；订阅套餐提供每月额度、团队席位、私有项目、并发构建和高级模型权限；异常退款和人工加款保留审计记录。
 6. 多模型调度：按任务类型选择 Qwen、第三方中转站或其他模型，增加成本、延迟、成功率和质量评分；长期目标是让 Agent 编排可以按节点选择“便宜模型 / 强模型 / 快模型”。
 7. 团队协作与真实连接器：增加 workspace 成员、角色权限、项目评论、版本 diff 和审查记录；把 GitHub、Stripe、Growth、Storage 等资源台从 Demo 状态机升级为 OAuth/Token 驱动的真实连接器。
@@ -196,7 +197,7 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 
 | 工具 | 用途 | 套餐 / 投入 |
 |------|------|------------|
-| **Claude Code** | 本项目主力工具，代码生成、架构设计、调试迭代 | PRO 5X × 1 + TEAM × 2，当前 3 账号周用量均达 97–100% |
-| **Codex** | 本项目主力工具，代码生成、逻辑实现、功能迭代、部署验证 | 高频使用，账单截图可按需补充 |
-| **Qoder**（阿里巴巴 AI IDE） | AI 编码环境，深度参与日常工作流 | 高频使用 |
+| **Claude Code** | 本项目主力工具，代码生成、架构设计、调试迭代 | $20/月 |
+| **Codex** | 本项目主力工具，代码生成、逻辑实现、功能迭代、部署验证 | PRO 5X × 1（$100/月）+ TEAM × 2（$60/月），共 $160/月 |
+| **Qoder**（阿里巴巴 AI IDE） | AI 编码环境，深度参与日常工作流 | $20/月 |
 | **token-qiv.cn** | 本人运营的 OpenAI 兼容中转服务，BuilderOS Demo 的 `gpt-5.5` 路由即通过此服务接入；切换模型路由后可在后台验证真实请求记录 | 自建运营 |

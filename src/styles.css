@@ -2180,7 +2180,7 @@ button {
 .section-view {
   height: calc(100vh - 45px);
   overflow: auto;
-  padding: 96px clamp(24px, 5vw, 72px);
+  padding: 72px clamp(24px, 5vw, 72px) 56px;
 }
 
 .section-heading h1 {
@@ -2223,12 +2223,64 @@ button {
   margin-top: 24px;
 }
 
+.compact-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 22px;
+}
+
 .cloud-hero-panel,
 .cloud-resource-card,
 .cloud-workflow-panel {
   border: 1px solid #dededc;
   border-radius: 8px;
   background: #fff;
+}
+
+.collapsible-panel {
+  margin-top: 14px;
+  border: 1px solid #dededc;
+  border-radius: 8px;
+  background: #fff;
+}
+
+.collapsible-panel summary {
+  display: flex;
+  min-height: 58px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+  cursor: pointer;
+  list-style: none;
+  padding: 14px 16px;
+}
+
+.collapsible-panel summary::-webkit-details-marker {
+  display: none;
+}
+
+.collapsible-panel summary > span {
+  display: grid;
+  gap: 4px;
+}
+
+.collapsible-panel summary strong {
+  color: #242422;
+  font-size: 17px;
+}
+
+.collapsible-panel summary small {
+  color: var(--text-muted);
+  font-weight: 700;
+}
+
+.collapsible-panel summary svg {
+  transition: transform 160ms ease;
+}
+
+.collapsible-panel[open] summary svg {
+  transform: rotate(180deg);
 }
 
 .cloud-hero-panel {
@@ -2431,6 +2483,11 @@ button {
   gap: 14px;
 }
 
+.cloud-workflow-panel .resource-binding {
+  border-top: 1px solid #eeeeec;
+  padding: 16px;
+}
+
 .resource-binding > div:first-child {
   display: grid;
   gap: 5px;
@@ -2478,6 +2535,15 @@ button {
 
 .run-console {
   margin-top: 14px;
+}
+
+.run-console.collapsible-panel {
+  padding: 0;
+}
+
+.run-console.collapsible-panel .empty-state,
+.run-console.collapsible-panel .run-list {
+  margin: 0 16px 16px;
 }
 
 .panel-title-row {
@@ -2646,6 +2712,27 @@ button {
   gap: 13px;
 }
 
+.knowledge-scope-note {
+  display: grid;
+  gap: 4px;
+  border: 1px solid #dbe6ff;
+  border-radius: 8px;
+  background: #f7f9ff;
+  color: #34415f;
+  padding: 12px;
+  line-height: 1.45;
+}
+
+.knowledge-scope-note strong {
+  color: #20305d;
+  font-size: 15px;
+}
+
+.knowledge-scope-note span,
+.knowledge-scope-note small {
+  color: #63708c;
+}
+
 .knowledge-editor label {
   display: grid;
   gap: 7px;
@@ -2743,18 +2830,44 @@ button {
   margin-top: 16px;
 }
 
+.knowledge-list-header {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px;
+  margin-top: 20px;
+}
+
+.knowledge-list-header h2 {
+  margin: 4px 0 0;
+  font-size: 22px;
+}
+
+.knowledge-list-header > span {
+  display: inline-grid;
+  min-height: 30px;
+  place-items: center;
+  border-radius: 999px;
+  background: #f0f2f8;
+  color: #4d62b7;
+  padding: 0 12px;
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .knowledge-list {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
-  margin-top: 14px;
+  margin-top: 10px;
 }
 
 .knowledge-card {
   position: relative;
   display: grid;
-  gap: 12px;
-  min-height: 216px;
+  align-content: start;
+  gap: 10px;
+  min-height: 168px;
   border: 1px solid #dededc;
   border-radius: 8px;
   background: #fff;
@@ -2777,7 +2890,11 @@ button {
 
 .knowledge-card p {
   margin: 0;
+  display: -webkit-box;
+  overflow: hidden;
   line-height: 1.55;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 3;
 }
 
 .source-meta {
@@ -4024,6 +4141,7 @@ button {
   .quick-prompt-row,
   .resource-grid,
   .cloud-console,
+  .compact-summary-strip,
   .live-metric-grid,
   .knowledge-list {
     grid-template-columns: repeat(2, minmax(0, 1fr));
@@ -4359,6 +4477,7 @@ button {
   .cloud-overview,
   .cloud-console,
   .cloud-stats,
+  .compact-summary-strip,
   .binding-flow,
   .live-metric-grid,
   .ops-layout,

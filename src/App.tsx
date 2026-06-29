@@ -2901,22 +2901,11 @@ function ResourcesView({ cloudResources, platformStatus, projects, onProvisionRe
         </div>
       </div>
 
-      <div className="cloud-overview">
-        <div className="cloud-hero-panel">
-          <span className="eyebrow">Atoms 对标重点</span>
-          <h2>把“生成应用”扩展成“生成并运营应用”</h2>
-          <p>
-            Atoms 的关键不只是代码生成，还包括 Cloud 资源、用户系统、数据库、应用存储、GitHub、支付、发布和增长模块。BuilderOS
-            在 Demo 中把这些能力做成可见、可点击、可持久化的控制台，并支持通义千问与第三方中转站的真实模型网关。
-          </p>
-        </div>
-        <div className="cloud-stats">
-          <Stat label="已连接资源" value={`${connectedCount}/${resources.length}`} icon={PlugZap} />
-          <Stat label="模型网关" value={llmLabel} icon={Brain} />
-          <Stat label="生成项目" value={String(projects.length)} icon={FolderKanban} />
-          <Stat label="服务存储" value={platformStatus?.storage.authStore === "mysql" ? "MySQL" : "JSON"} icon={Database} />
-          <Stat label="发布应用" value={String(projects.filter((project) => project.status === "已发布").length)} icon={Rocket} />
-        </div>
+      <div className="compact-summary-strip">
+        <Stat label="已连接资源" value={`${connectedCount}/${resources.length}`} icon={PlugZap} />
+        <Stat label="模型网关" value={llmLabel} icon={Brain} />
+        <Stat label="服务存储" value={platformStatus?.storage.authStore === "mysql" ? "MySQL" : "JSON"} icon={Database} />
+        <Stat label="发布应用" value={String(projects.filter((project) => project.status === "已发布").length)} icon={Rocket} />
       </div>
 
       <div className="cloud-console">
@@ -2965,11 +2954,14 @@ function ResourcesView({ cloudResources, platformStatus, projects, onProvisionRe
         })}
       </div>
 
-      <div className="wallet-panel cloud-workflow-panel">
-        <div>
-          <span className="eyebrow">Current App Binding</span>
-          <h2>当前项目资源绑定</h2>
-        </div>
+      <details className="collapsible-panel cloud-workflow-panel">
+        <summary>
+          <span>
+            <strong>当前项目资源绑定</strong>
+            <small>{latestProject ? `${latestProject.title} · ${latestProject.status}` : "生成项目后可查看资源流"}</small>
+          </span>
+          <ChevronDown size={17} />
+        </summary>
         <div className="resource-binding">
           <div>
             <strong>{latestProject?.title || "还没有项目"}</strong>
@@ -2981,7 +2973,7 @@ function ResourcesView({ cloudResources, platformStatus, projects, onProvisionRe
             ))}
           </div>
         </div>
-      </div>
+      </details>
     </section>
   );
 }
@@ -3719,9 +3711,7 @@ function DataView({ knowledgeSources, orchestrations, platformStatus, projects, 
           value={String(platformStatus?.storage.orchestrations ?? orchestrations.length)}
           icon={Settings2}
         />
-        <Stat label="云资源" value={String(platformStatus?.storage.cloudResources ?? 0)} icon={Cloud} />
         <Stat label="模型网关" value={llmLabel} icon={Brain} />
-        <Stat label="API 内存" value={`${platformStatus?.process.memoryMb ?? 0} MB`} icon={Server} />
       </div>
 
       <div className="ops-layout">
@@ -3777,14 +3767,18 @@ function DataView({ knowledgeSources, orchestrations, platformStatus, projects, 
         </div>
       </div>
 
-      <div className="run-console">
-        <div className="panel-title-row">
-          <div>
-            <span className="eyebrow">Build Runs</span>
-            <h2>最近构建记录</h2>
-          </div>
-          {latestRun && <small>Latest: {formatDateTime(latestRun.finishedAt || latestRun.startedAt)}</small>}
-        </div>
+      <details className="run-console collapsible-panel">
+        <summary>
+          <span>
+            <strong>最近构建记录</strong>
+            <small>
+              {latestRun
+                ? `${runRecords.length} 条 · Latest ${formatDateTime(latestRun.finishedAt || latestRun.startedAt)}`
+                : "暂无服务端运行记录"}
+            </small>
+          </span>
+          <ChevronDown size={17} />
+        </summary>
 
         {runRecords.length === 0 ? (
           <div className="empty-state compact">
@@ -3817,7 +3811,7 @@ function DataView({ knowledgeSources, orchestrations, platformStatus, projects, 
             ))}
           </div>
         )}
-      </div>
+      </details>
     </section>
   );
 }
@@ -3897,6 +3891,11 @@ function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources, onUploadKnowl
 
       <div className="knowledge-layout">
         <div className="knowledge-editor">
+          <div className="knowledge-scope-note">
+            <strong>当前交付：单工作区知识池</strong>
+            <span>上传和手写内容会进入同一个 RAG 召回池，供构建与 Agent 编排使用。</span>
+            <small>下一阶段升级为“多个知识库 / 每库多资料 / 选择召回范围”。</small>
+          </div>
           <label>
             标题
             <input value={draftTitle} onChange={(event) => setDraftTitle(event.target.value)} />
@@ -3946,6 +3945,13 @@ function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources, onUploadKnowl
         </div>
       </div>
 
+      <div className="knowledge-list-header">
+        <div>
+          <span className="eyebrow">Knowledge Entries</span>
+          <h2>知识条目</h2>
+        </div>
+        <span>{knowledgeSources.length} 条</span>
+      </div>
       <div className="knowledge-list">
         {knowledgeSources.map((source) => (
           <article key={source.id} className="knowledge-card">

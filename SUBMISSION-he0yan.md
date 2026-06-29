@@ -17,7 +17,7 @@
 
 ## 3. 代码链接
 
-- GitHub: 提交前创建 public 仓库后填写。
+- GitHub: https://github.com/heyrry/builderos-atoms-demo
 
 ## 4. 建议评审路径
 

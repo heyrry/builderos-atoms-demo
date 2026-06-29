@@ -18,6 +18,8 @@ import {
   CreditCard,
   Database,
   Download,
+  Eye,
+  EyeOff,
   FileText,
   FlaskConical,
   FolderKanban,
@@ -29,6 +31,7 @@ import {
   Home,
   Layers,
   LockKeyhole,
+  LogOut,
   Megaphone,
   MessageCircle,
   Monitor,
@@ -36,7 +39,6 @@ import {
   Paintbrush,
   PanelLeftClose,
   Paperclip,
-  PlayCircle,
   PlugZap,
   Rocket,
   Search,
@@ -54,7 +56,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 
-type Section = "home" | "resources" | "knowledge" | "data" | "compare" | "projects";
+type Section = "home" | "resources" | "knowledge" | "orchestration" | "data" | "compare" | "projects";
 type WorkMode = "build" | "research" | "video";
 type AuthIntent = "login" | "signup";
 
@@ -63,11 +65,33 @@ type Project = {
   title: string;
   mode: WorkMode;
   status: "构建中" | "可预览" | "已发布";
+  version?: number;
+  versions?: ProjectVersion[];
   updatedAt: string;
   prompt: string;
   generated: GeneratedApp;
   artifactPath?: string;
+  previewUrl?: string;
   publishedUrl?: string;
+  publishedAt?: string;
+  publishChecks?: PublishCheck[];
+};
+
+type ProjectVersion = {
+  id: string;
+  label: string;
+  summary: string;
+  status: "ready" | "published";
+  createdAt: string;
+  fileCount: number;
+  sourceBytes: number;
+  previewUrl?: string;
+};
+
+type PublishCheck = {
+  label: string;
+  status: "passed" | "warning";
+  detail: string;
 };
 
 type GeneratedFile = {
@@ -94,6 +118,7 @@ type GeneratedApp = {
   knowledgeHits: Array<{ title: string; excerpt: string; score: number }>;
   extensions: string[];
   infraPlan: Array<{ layer: string; detail: string }>;
+  llm?: LlmRunInfo;
 };
 
 type WorkspaceProfile = {
@@ -130,7 +155,33 @@ type RunRecord = {
   agentCount: number;
   agents: Array<{ name: string; role: string; state: string }>;
   knowledgeHits: Array<{ title: string; excerpt: string; score: number }>;
-  output: { pages: number; features: number; sourceBytes: number };
+  output: { pages: number; features: number; sourceBytes: number; llm?: LlmRunInfo };
+};
+
+type LlmRunInfo = {
+  used: boolean;
+  provider: string;
+  providerLabel?: string;
+  model: string;
+  baseUrlHost?: string;
+  fallbackReason?: string;
+};
+
+type LlmProviderStatus = {
+  id: string;
+  label: string;
+  protocol: string;
+  model: string;
+  baseUrlHost: string;
+  configured: boolean;
+};
+
+type LlmStatus = {
+  mode: "real" | "fallback";
+  strategy: string;
+  activeProvider: LlmProviderStatus | null;
+  providers: LlmProviderStatus[];
+  fallbackReason: string;
 };
 
 type PlatformStatus = {
@@ -148,6 +199,8 @@ type PlatformStatus = {
     projects: number;
     knowledgeSources: number;
     runRecords: number;
+    cloudResources?: number;
+    orchestrations?: number;
     updatedAt: string;
     authStore?: "mysql" | "json";
   };
@@ -158,6 +211,21 @@ type PlatformStatus = {
     latencyMs: number;
     endpoint: string;
   }>;
+  llm?: LlmStatus;
+};
+
+type CloudResource = {
+  id: string;
+  type: string;
+  title: string;
+  provider: string;
+  status: "connected" | "ready" | "degraded";
+  scope: string;
+  description: string;
+  endpoint: string;
+  usage: string;
+  updatedAt: string;
+  actions: string[];
 };
 
 type KnowledgeSource = {
@@ -166,6 +234,79 @@ type KnowledgeSource = {
   content: string;
   tags: string[];
   updatedAt: string;
+  source?: {
+    filename: string;
+    extension: string;
+    parser: string;
+    chunkIndex: number;
+    chunkCount: number;
+    uploadedAt: string;
+  };
+};
+
+type OrchestrationStep = {
+  id: string;
+  agent: string;
+  role: string;
+  action: string;
+  output: string;
+  tool: string;
+  guardrail: string;
+  systemPrompt?: string;
+  llmProvider?: string;
+};
+
+type OrchestrationRun = {
+  id: string;
+  status: "completed" | "failed";
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  task?: string;
+  evidence?: Array<{ title: string; excerpt: string; score: number; tags?: string[] }>;
+  finalReport?: {
+    title: string;
+    summary: string;
+    recommendations: Array<{
+      name: string;
+      score: number;
+      decision: string;
+      reasons: string[];
+      risks: string[];
+      evidenceTitles: string[];
+      excerpt?: string;
+    }>;
+    evidenceTitles: string[];
+    checks: Array<{ label: string; status: string; detail: string }>;
+  };
+  trace: Array<{
+    stepId: string;
+    agent: string;
+    role?: string;
+    action: string;
+    result: string;
+    output?: string;
+    tool?: string;
+    guardrail?: string;
+    findings?: string[];
+    evidenceTitles?: string[];
+    validation?: { passed: boolean; detail: string };
+    evidence?: Array<{ title: string; excerpt: string; score: number; tags?: string[] }>;
+    llm?: LlmRunInfo;
+    durationMs: number;
+  }>;
+};
+
+type AgentOrchestration = {
+  id: string;
+  name: string;
+  description: string;
+  domain: string;
+  status: "draft" | "ready";
+  owner: string;
+  updatedAt: string;
+  steps: OrchestrationStep[];
+  lastRun?: OrchestrationRun | null;
 };
 
 type Agent = {
@@ -195,7 +336,7 @@ const agents: Agent[] = [
 ];
 
 const resourceItems: ResourceItem[] = [
-  { title: "模型网关", meta: "GPT, Claude, Gemini, Seedance", icon: Brain, accent: "#4867f1" },
+  { title: "模型网关", meta: "通义千问、第三方中转站、模板降级", icon: Brain, accent: "#4867f1" },
   { title: "云数据库", meta: "Auth, Table, Storage, Edge API", icon: Database, accent: "#21a67a" },
   { title: "支付连接", meta: "订阅, 一次性付款, Webhook", icon: CreditCard, accent: "#d46b2c" },
   { title: "发布托管", meta: "预览域名, 自定义域名, 私有访问", icon: Globe2, accent: "#0f9ca8" },
@@ -216,18 +357,38 @@ const quickPrompts = [
   "生成一个招聘管理后台，支持候选人看板和数据分析",
 ];
 
+const quickPromptLabels = ["AI 客服 SaaS", "AI 视频调研", "电商落地页", "招聘管理后台"];
+
 const initialPrompt = "请描述你要构建的产品、页面、数据、连接器或增长任务。";
 const candidateName = "BuilderOS";
 const storageKey = "atoms-demo-builderos-projects-v2";
 const profileKey = "atoms-demo-builderos-profile-v2";
 const authTokenKey = "atoms-demo-builderos-auth-token-v1";
 const knowledgeKey = "atoms-demo-builderos-knowledge-v2";
+const demoAccount = {
+  name: "ROOT Reviewer",
+  email: "reviewer@builderos.demo",
+  password: "BuilderOS2026",
+  goal: "评审 BuilderOS 的 Atoms-like 生成、云资源、版本发布和源码交付能力",
+};
 const defaultProfile: WorkspaceProfile = {
   name: "",
   email: "",
   goal: "用 BuilderOS 构建一个 AI Native 应用",
   credits: 70,
 };
+
+function getInitialSection(): Section {
+  try {
+    const section = new URLSearchParams(window.location.search).get("section");
+    if (["home", "resources", "knowledge", "orchestration", "data", "compare", "projects"].includes(section || "")) {
+      return section as Section;
+    }
+  } catch {
+    return "home";
+  }
+  return "home";
+}
 
 const defaultKnowledgeSources: KnowledgeSource[] = [
   {
@@ -254,18 +415,136 @@ const defaultKnowledgeSources: KnowledgeSource[] = [
     tags: ["Atoms", "Positioning", "Platform"],
     updatedAt: "内置",
   },
+  {
+    id: 101,
+    title: "岗位需求：Java 后端工程师",
+    content:
+      "岗位：Java 后端工程师。硬性条件：5年以上后端开发经验，熟悉 Java、Spring Boot、MySQL、Redis、消息队列和分布式系统。优先条件：有电商平台、交易平台、订单、支付、库存、商品、营销等系统经验。交付要求：输出候选人推荐排序、证据、风险点和面试问题。",
+    tags: ["招聘", "岗位需求", "Java", "后端", "电商"],
+    updatedAt: "内置",
+  },
 ];
+
+const defaultOrchestrations: AgentOrchestration[] = [
+  {
+    id: "recruiting-agent-chain",
+    name: "招聘多 Agent 编排模板",
+    description: "从通用模板快速创建可复用的 Agent 编排配置，展示 BuilderOS 对 OmniAgent 自由编排能力的扩展。",
+    domain: "招聘助手",
+    status: "ready",
+    owner: "BuilderOS",
+    updatedAt: "内置",
+    steps: [
+      {
+        id: "director",
+        agent: "招聘助手",
+        role: "总控",
+        action: "拆解招聘任务并分配子 Agent",
+        output: "执行计划",
+        tool: "Planner",
+        guardrail: "确认岗位、候选人来源和评分维度完整",
+      },
+      {
+        id: "requirement",
+        agent: "需求分析 Agent",
+        role: "需求分析",
+        action: "提取岗位职责、硬性条件和优先级",
+        output: "岗位画像",
+        tool: "RAG",
+        guardrail: "输出必须附带依据",
+      },
+      {
+        id: "retriever",
+        agent: "简历检索 Agent",
+        role: "简历检索",
+        action: "从候选人池中筛选匹配简历",
+        output: "候选人短名单",
+        tool: "Search",
+        guardrail: "避免遗漏强匹配候选人",
+      },
+      {
+        id: "scorer",
+        agent: "匹配评分 Agent",
+        role: "匹配评分",
+        action: "根据能力、经验和风险进行排序",
+        output: "评分表",
+        tool: "Ranker",
+        guardrail: "分数必须可解释",
+      },
+      {
+        id: "interview",
+        agent: "面试题 Agent",
+        role: "面试设计",
+        action: "为候选人生成结构化面试题",
+        output: "面试题库",
+        tool: "Generator",
+        guardrail: "题目覆盖岗位关键能力",
+      },
+      {
+        id: "report",
+        agent: "报告汇总 Agent",
+        role: "汇总报告",
+        action: "输出推荐理由、风险和下一步动作",
+        output: "招聘评估报告",
+        tool: "Reporter",
+        guardrail: "结论和证据一一对应",
+      },
+    ],
+    lastRun: null,
+  },
+];
+
+function defaultStepSystemPrompt(step: Pick<OrchestrationStep, "agent" | "role" | "action" | "output" | "tool" | "guardrail">) {
+  return [
+    `你是 BuilderOS 多 Agent 编排中的「${step.agent || "专业 Agent"}」，角色是「${step.role || "执行节点"}」。`,
+    `你的任务：${step.action || "根据上游输入完成本节点工作"}。`,
+    `必须产出：${step.output || "结构化结果"}，并使用工具能力：${step.tool || "LLM + RAG"}。`,
+    `守护规则：${step.guardrail || "输出必须可解释、可审查，并引用知识库证据"}。`,
+    "不要编造不存在的候选人、经历或数据；如果证据不足，明确标记风险并交给下一步处理。",
+  ].join("\n");
+}
 
 type ServerState = {
   projects?: Project[];
   runRecords?: RunRecord[];
+  cloudResources?: CloudResource[];
   knowledgeSources?: KnowledgeSource[];
+  orchestrations?: AgentOrchestration[];
 };
 
 type BuildResponse = {
   project: Project;
   run: RunRecord;
   state: ServerState;
+};
+
+type PublishResponse = {
+  project: Project;
+  state: ServerState;
+};
+
+type VersionResponse = {
+  project: Project;
+  state: ServerState;
+};
+
+type OrchestrationRunResponse = {
+  orchestration: AgentOrchestration;
+  run: OrchestrationRun;
+  state: ServerState;
+};
+
+type KnowledgeUploadResponse = {
+  sources: KnowledgeSource[];
+  parsed: Array<{
+    filename: string;
+    extension: string;
+    chunks: number;
+    tags: string[];
+    characters: number;
+  }>;
+  state: ServerState;
+  note: string;
 };
 
 function usePersistentState<T>(key: string, initialValue: T) {
@@ -589,6 +868,7 @@ function createGeneratedApp(
       note: `从知识库召回 ${knowledgeHits.length} 条资料，用于约束页面结构、评审说明和扩展路线。`,
     },
     { agent: "Luna", note: "生成可直接预览的 HTML / CSS / JS，并挂载演示级交互。" },
+    { agent: "Model Router", note: "当前为浏览器本地降级生成，真实 LLM 调用由服务端 /api/build 执行。" },
   ];
   const alternatives = raceMode
     ? [
@@ -760,11 +1040,18 @@ document.querySelector(".primary").addEventListener("click", () => {
     knowledgeHits,
     extensions,
     infraPlan,
+    llm: {
+      used: false,
+      provider: "template",
+      providerLabel: "BuilderOS 本地模板",
+      model: "browser-fallback",
+      fallbackReason: "服务端不可用时使用浏览器降级生成。",
+    },
   };
 }
 
 function App() {
-  const [activeSection, setActiveSection] = useState<Section>("home");
+  const [activeSection, setActiveSection] = useState<Section>(() => getInitialSection());
   const [profile, setProfile] = usePersistentState<WorkspaceProfile>(profileKey, defaultProfile);
   const [authToken, setAuthToken] = usePersistentState<string | null>(authTokenKey, null);
   const [onboardingOpen, setOnboardingOpen] = useState(false);
@@ -777,8 +1064,8 @@ function App() {
   const [teamMode, setTeamMode] = useState(true);
   const [deepResearch, setDeepResearch] = useState(false);
   const [raceMode, setRaceMode] = useState(false);
-  const [menuOpen, setMenuOpen] = useState(true);
-  const [attachmentOpen, setAttachmentOpen] = useState(true);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [attachmentOpen, setAttachmentOpen] = useState(false);
   const [connectorOpen, setConnectorOpen] = useState(false);
   const [prompt, setPrompt] = useState("");
   const [isBuilding, setIsBuilding] = useState(false);
@@ -790,13 +1077,27 @@ function App() {
     knowledgeKey,
     defaultKnowledgeSources,
   );
+  const [orchestrations, setOrchestrations] = usePersistentState<AgentOrchestration[]>(
+    "atoms-demo-builderos-orchestrations-v1",
+    defaultOrchestrations,
+  );
+  const [selectedOrchestrationId, setSelectedOrchestrationId] = usePersistentState<string>(
+    "atoms-demo-builderos-selected-orchestration-v1",
+    defaultOrchestrations[0].id,
+  );
+  const [cloudResources, setCloudResources] = useState<CloudResource[]>([]);
   const [serverStatus, setServerStatus] = useState<"connecting" | "synced" | "local">("connecting");
   const [platformStatus, setPlatformStatus] = useState<PlatformStatus | null>(null);
+  const [selectedLlmProvider, setSelectedLlmProvider] = usePersistentState<string>(
+    "builderos-selected-llm-provider-v1",
+    "auto",
+  );
   const [isFinalizing, setIsFinalizing] = useState(false);
   const [selectedProjectId, setSelectedProjectId] = usePersistentState<number | null>(
     "atoms-demo-builderos-selected-project-v2",
     null,
   );
+  const [sidebarProjectsOpen, setSidebarProjectsOpen] = useState(false);
 
   const selectedProject = projects.find((project) => project.id === selectedProjectId) ?? projects[0];
   const registrationRequired = !(authToken && profile.registeredAt);
@@ -821,6 +1122,12 @@ function App() {
       setProfile(defaultProfile);
     }
   }, [authToken, profile.registeredAt, setProfile]);
+
+  useEffect(() => {
+    if (authToken && profile.registeredAt) {
+      setWorkspaceOpen(true);
+    }
+  }, [authToken, profile.registeredAt]);
 
   useEffect(() => {
     if (!authToken) {
@@ -865,8 +1172,15 @@ function App() {
         if (state.runRecords?.length) {
           setRunRecords(state.runRecords);
         }
+        if (state.cloudResources?.length) {
+          setCloudResources(state.cloudResources);
+        }
         if (state.knowledgeSources?.length) {
           setKnowledgeSources(state.knowledgeSources);
+        }
+        if (state.orchestrations?.length) {
+          setOrchestrations(state.orchestrations);
+          setSelectedOrchestrationId(state.orchestrations[0].id);
         }
         setServerStatus("synced");
       })
@@ -879,7 +1193,27 @@ function App() {
     return () => {
       ignore = true;
     };
-  }, [setKnowledgeSources, setProjects, setRunRecords, setSelectedProjectId]);
+  }, [setKnowledgeSources, setOrchestrations, setProjects, setRunRecords, setSelectedOrchestrationId, setSelectedProjectId]);
+
+  useEffect(() => {
+    let ignore = false;
+
+    refreshCloudResources()
+      .then(() => {
+        if (!ignore) {
+          setServerStatus("synced");
+        }
+      })
+      .catch(() => {
+        if (!ignore) {
+          setServerStatus("local");
+        }
+      });
+
+    return () => {
+      ignore = true;
+    };
+  }, []);
 
   useEffect(() => {
     let ignore = false;
@@ -928,7 +1262,7 @@ function App() {
     setIsFinalizing(true);
     apiRequest<BuildResponse>("/api/build", {
       method: "POST",
-      body: JSON.stringify({ prompt: currentBuildPrompt, mode: workMode, raceMode }),
+      body: JSON.stringify({ prompt: currentBuildPrompt, mode: workMode, raceMode, llmProvider: selectedLlmProvider }),
     })
       .then((result) => {
         const nextProjects = result.state.projects?.length ? result.state.projects : [result.project, ...projects];
@@ -937,6 +1271,9 @@ function App() {
         setRunRecords(nextRunRecords);
         if (result.state.knowledgeSources?.length) {
           setKnowledgeSources(result.state.knowledgeSources);
+        }
+        if (result.state.orchestrations?.length) {
+          setOrchestrations(result.state.orchestrations);
         }
         setSelectedProjectId(result.project.id);
         setServerStatus("synced");
@@ -969,6 +1306,7 @@ function App() {
             pages: generated.pages.length,
             features: generated.features.length,
             sourceBytes: generated.html.length,
+            llm: generated.llm,
           },
         };
         const nextProjects = [newProject, ...projects];
@@ -988,6 +1326,7 @@ function App() {
     isFinalizing,
     isBuilding,
     knowledgeSources,
+    orchestrations,
     projects,
     progress,
     raceMode,
@@ -996,6 +1335,7 @@ function App() {
     setProjects,
     setRunRecords,
     setSelectedProjectId,
+    selectedLlmProvider,
     workMode,
   ]);
 
@@ -1003,6 +1343,7 @@ function App() {
     nextProjects = projects,
     nextKnowledgeSources = knowledgeSources,
     nextRunRecords = runRecords,
+    nextOrchestrations = orchestrations,
   ) {
     return apiRequest<ServerState>("/api/state", {
       method: "POST",
@@ -1010,15 +1351,78 @@ function App() {
         projects: nextProjects,
         knowledgeSources: nextKnowledgeSources,
         runRecords: nextRunRecords,
+        orchestrations: nextOrchestrations,
       }),
     })
       .then(() => setServerStatus("synced"))
       .catch(() => setServerStatus("local"));
   }
 
+  function refreshCloudResources() {
+    return apiRequest<{ resources: CloudResource[] }>("/api/cloud-resources").then((result) => {
+      setCloudResources(result.resources);
+      return result.resources;
+    });
+  }
+
   function saveKnowledgeSources(nextSources: KnowledgeSource[]) {
     setKnowledgeSources(nextSources);
     void syncServerState(projects, nextSources);
+  }
+
+  async function uploadKnowledgeFiles(files: File[]) {
+    const allowed = new Set(["txt", "md", "csv", "json"]);
+    const payloadFiles = await Promise.all(
+      files.map(async (file) => {
+        const extension = file.name.split(".").pop()?.toLowerCase() || "";
+        if (!allowed.has(extension)) {
+          throw new Error("当前仅支持 .txt / .md / .csv / .json，PDF/DOCX 作为后续增强。");
+        }
+        return {
+          name: file.name,
+          content: await file.text(),
+        };
+      }),
+    );
+    const result = await apiRequest<KnowledgeUploadResponse>("/api/knowledge/upload", {
+      method: "POST",
+      body: JSON.stringify({ files: payloadFiles }),
+    });
+    if (result.state.knowledgeSources?.length) {
+      setKnowledgeSources(result.state.knowledgeSources);
+    } else {
+      setKnowledgeSources((items) => [...result.sources, ...items]);
+    }
+    setServerStatus("synced");
+    return result;
+  }
+
+  function saveOrchestrations(nextOrchestrations: AgentOrchestration[], selectedId = selectedOrchestrationId) {
+    setOrchestrations(nextOrchestrations);
+    setSelectedOrchestrationId(selectedId);
+    void syncServerState(projects, knowledgeSources, runRecords, nextOrchestrations);
+  }
+
+  function applyOrchestrationRunResult(result: OrchestrationRunResponse) {
+    if (result.state.projects?.length) {
+      setProjects(result.state.projects);
+    }
+    if (result.state.runRecords?.length) {
+      setRunRecords(result.state.runRecords);
+    }
+    if (result.state.knowledgeSources?.length) {
+      setKnowledgeSources(result.state.knowledgeSources);
+    }
+    if (result.state.orchestrations?.length) {
+      setOrchestrations(result.state.orchestrations);
+    } else {
+      setOrchestrations((items) =>
+        items.map((item) => (item.id === result.orchestration.id ? result.orchestration : item)),
+      );
+    }
+    setSelectedOrchestrationId(result.orchestration.id);
+    setServerStatus("synced");
+    void refreshCloudResources();
   }
 
   function startBuild(nextPrompt = prompt) {
@@ -1029,24 +1433,95 @@ function App() {
     setIsBuilding(true);
     setWorkspaceOpen(true);
     setActiveSection("home");
-    setProfile((current) => ({ ...current, credits: Math.max(0, current.credits - (raceMode ? 8 : 3)) }));
+  }
+
+  function replaceProject(nextProject: Project, nextState?: ServerState) {
+    const nextProjects = nextState?.projects?.length
+      ? nextState.projects
+      : projects.map((project) => (project.id === nextProject.id ? nextProject : project));
+    setProjects(nextProjects);
+    setSelectedProjectId(nextProject.id);
+    if (nextState?.runRecords?.length) {
+      setRunRecords(nextState.runRecords);
+    }
+    if (nextState?.knowledgeSources?.length) {
+      setKnowledgeSources(nextState.knowledgeSources);
+    }
+    if (nextState?.orchestrations?.length) {
+      setOrchestrations(nextState.orchestrations);
+    }
   }
 
   function publishProject(projectId: number) {
-    setProjects((items) => {
-      const nextProjects: Project[] = items.map((project) =>
-        project.id === projectId
-          ? {
-              ...project,
-              status: "已发布",
-              publishedUrl: `https://preview.builderos.local/${project.id}`,
-              updatedAt: "刚刚",
+    apiRequest<PublishResponse>(`/api/projects/${projectId}/publish`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    })
+      .then((result) => {
+        replaceProject(result.project, result.state);
+        setServerStatus("synced");
+        void refreshCloudResources();
+      })
+      .catch(() => {
+        setProjects((items) => {
+          const nextProjects: Project[] = items.map((project) =>
+            project.id === projectId
+              ? {
+                  ...project,
+                  status: "已发布",
+                  publishedUrl: `${window.location.origin}/api/preview/${project.id}`,
+                  publishedAt: new Date().toISOString(),
+                  updatedAt: "刚刚",
+                  publishChecks: [
+                    { label: "本地发布状态", status: "warning", detail: "API 暂不可用，已在浏览器侧保留发布状态。" },
+                  ],
+                }
+              : project,
+          );
+          void syncServerState(nextProjects, knowledgeSources);
+          return nextProjects;
+        });
+      });
+  }
+
+  function createProjectVersion(projectId: number) {
+    apiRequest<VersionResponse>(`/api/projects/${projectId}/versions`, {
+      method: "POST",
+      body: JSON.stringify({ instruction: "手动保存当前应用版本" }),
+    })
+      .then((result) => {
+        replaceProject(result.project, result.state);
+        setServerStatus("synced");
+      })
+      .catch(() => {
+        setProjects((items) => {
+          const nextProjects = items.map((project) => {
+            if (project.id !== projectId) {
+              return project;
             }
-          : project,
-      );
-      void syncServerState(nextProjects, knowledgeSources);
-      return nextProjects;
-    });
+            const files = getGeneratedFiles(project);
+            const versions = Array.isArray(project.versions) ? project.versions : [];
+            const nextVersion: ProjectVersion = {
+              id: `local-${project.id}-v${versions.length + 1}`,
+              label: `版本 ${versions.length + 1}`,
+              summary: "浏览器侧保存的版本快照。",
+              status: "ready",
+              createdAt: new Date().toISOString(),
+              fileCount: files.length,
+              sourceBytes: files.reduce((total, file) => total + file.content.length, 0),
+              previewUrl: `/api/preview/${project.id}`,
+            };
+            return {
+              ...project,
+              version: versions.length + 1,
+              versions: [nextVersion, ...versions],
+              updatedAt: "刚刚",
+            };
+          });
+          void syncServerState(nextProjects, knowledgeSources);
+          return nextProjects;
+        });
+      });
   }
 
   function previewProject(projectId: number) {
@@ -1055,6 +1530,13 @@ function App() {
   }
 
   function downloadProject(project: Project) {
+    if (project.artifactPath || project.generated.files?.length) {
+      const anchor = document.createElement("a");
+      anchor.href = `/api/projects/${project.id}/download`;
+      anchor.download = `${toKebabCase(project.title)}.zip`;
+      anchor.click();
+      return;
+    }
     const blob = new Blob([project.generated.html], { type: "text/html;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
@@ -1062,6 +1544,22 @@ function App() {
     anchor.download = `${project.title.replace(/[^\u4e00-\u9fa5a-z0-9]+/gi, "-").slice(0, 42)}.html`;
     anchor.click();
     URL.revokeObjectURL(url);
+  }
+
+  function provisionCloudResource(resourceId: string) {
+    apiRequest<{ resources: CloudResource[] }>(`/api/cloud-resources/${resourceId}/provision`, {
+      method: "POST",
+      body: JSON.stringify({}),
+    })
+      .then((result) => {
+        setCloudResources(result.resources);
+        setServerStatus("synced");
+      })
+      .catch(() => {
+        setCloudResources((items) =>
+          items.map((item) => (item.id === resourceId ? { ...item, status: "connected", updatedAt: "刚刚" } : item)),
+        );
+      });
   }
 
   function selectMode(mode: WorkMode) {
@@ -1110,6 +1608,27 @@ function App() {
       setAuthError(error instanceof Error ? error.message : "认证失败，请稍后再试。");
     } finally {
       setAuthLoading(false);
+    }
+  }
+
+  function logout() {
+    const token = authToken;
+    setAuthToken(null);
+    setProfile(defaultProfile);
+    setWorkspaceOpen(false);
+    setOnboardingOpen(false);
+    setAuthIntent(null);
+    setAuthError("");
+    setStartAfterSignup(false);
+    setIsBuilding(false);
+    setProgress(0);
+
+    if (token) {
+      void apiRequest<{ ok: boolean }>("/api/auth/logout", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+        body: JSON.stringify({}),
+      });
     }
   }
 
@@ -1196,6 +1715,11 @@ function App() {
           <ChevronDown size={16} />
         </button>
 
+        <button className="workspace-logout" onClick={logout}>
+          <LogOut size={16} />
+          <span>退出登录</span>
+        </button>
+
         <nav className="nav-list" aria-label="主导航">
           <NavItem icon={Home} label="首页" active={activeSection === "home"} onClick={() => setActiveSection("home")} />
           <NavItem
@@ -1209,6 +1733,12 @@ function App() {
             label="知识库"
             active={activeSection === "knowledge"}
             onClick={() => setActiveSection("knowledge")}
+          />
+          <NavItem
+            icon={Settings2}
+            label="编排"
+            active={activeSection === "orchestration"}
+            onClick={() => setActiveSection("orchestration")}
           />
           <NavItem
             icon={Server}
@@ -1231,21 +1761,33 @@ function App() {
         </nav>
 
         <div className="project-slot">
-          {projects.length === 0 ? (
-            <div className="empty-projects">
-              <PackageOpen size={24} />
-              <span>还没有项目</span>
-              <small>点击“首页”开始。</small>
-            </div>
-          ) : (
-            <div className="mini-projects">
-              {projects.slice(0, 3).map((project) => (
-                <button key={project.id} className="mini-project" onClick={() => setActiveSection("projects")}>
-                  <span>{project.title}</span>
-                  <small>{modeLabel[project.mode]} · {project.updatedAt}</small>
+          <button className="sidebar-project-toggle" onClick={() => setSidebarProjectsOpen((value) => !value)}>
+            <FolderKanban size={17} />
+            <span>最近项目</span>
+            <em>{projects.length}</em>
+            <ChevronDown size={15} className={sidebarProjectsOpen ? "rotated" : ""} />
+          </button>
+          {sidebarProjectsOpen && (
+            projects.length === 0 ? (
+              <div className="empty-projects compact">
+                <PackageOpen size={21} />
+                <span>还没有项目</span>
+                <small>从首页开始构建。</small>
+              </div>
+            ) : (
+              <div className="mini-projects">
+                {projects.slice(0, 3).map((project) => (
+                  <button key={project.id} className="mini-project" onClick={() => setActiveSection("projects")}>
+                    <span>{project.title}</span>
+                    <small>{modeLabel[project.mode]} · {project.updatedAt}</small>
+                  </button>
+                ))}
+                <button className="mini-project all-projects" onClick={() => setActiveSection("projects")}>
+                  <span>查看全部项目</span>
+                  <small>{projects.length} 个项目</small>
                 </button>
-              ))}
-            </div>
+              </div>
+            )
           )}
         </div>
 
@@ -1280,6 +1822,11 @@ function App() {
         </div>
 
         <div className="top-tools">
+          <ModelRouteSelector
+            llmStatus={platformStatus?.llm}
+            selectedProvider={selectedLlmProvider}
+            onSelect={setSelectedLlmProvider}
+          />
           <span className={`sync-pill ${serverStatus}`}>
             {serverStatus === "synced" ? "服务端同步" : serverStatus === "connecting" ? "连接中" : "本地模式"}
           </span>
@@ -1306,6 +1853,7 @@ function App() {
             teamMode={teamMode}
             ownerName={displayName}
             workMode={workMode}
+            onCreateProjectVersion={createProjectVersion}
             onDownloadProject={downloadProject}
             onPromptChange={setPrompt}
             onPublishProject={publishProject}
@@ -1321,13 +1869,36 @@ function App() {
           />
         )}
 
-        {activeSection === "resources" && <ResourcesView />}
+        {activeSection === "resources" && (
+          <ResourcesView
+            cloudResources={cloudResources}
+            platformStatus={platformStatus}
+            projects={projects}
+            onProvisionResource={provisionCloudResource}
+          />
+        )}
         {activeSection === "knowledge" && (
-          <KnowledgeView knowledgeSources={knowledgeSources} onSaveKnowledgeSources={saveKnowledgeSources} />
+          <KnowledgeView
+            knowledgeSources={knowledgeSources}
+            onSaveKnowledgeSources={saveKnowledgeSources}
+            onUploadKnowledgeFiles={uploadKnowledgeFiles}
+          />
+        )}
+        {activeSection === "orchestration" && (
+          <OrchestrationView
+            orchestrations={orchestrations.length ? orchestrations : defaultOrchestrations}
+            selectedId={selectedOrchestrationId}
+            llmStatus={platformStatus?.llm}
+            selectedLlmProvider={selectedLlmProvider}
+            onSelect={setSelectedOrchestrationId}
+            onSaveOrchestrations={saveOrchestrations}
+            onRunResult={applyOrchestrationRunResult}
+          />
         )}
         {activeSection === "data" && (
           <DataView
             knowledgeSources={knowledgeSources}
+            orchestrations={orchestrations}
             platformStatus={platformStatus}
             projects={projects}
             runRecords={runRecords}
@@ -1337,6 +1908,7 @@ function App() {
         {activeSection === "projects" && (
           <ProjectsView
             projects={projects}
+            onCreateProjectVersion={createProjectVersion}
             onPreviewProject={previewProject}
             onDownloadProject={downloadProject}
             onPublishProject={publishProject}
@@ -1559,6 +2131,7 @@ function AuthPage({ intent, profile, onBack, onCreate, onLogin, onSubmit, error,
     password: "",
     goal: profile.goal || defaultProfile.goal,
   });
+  const [passwordVisible, setPasswordVisible] = useState(false);
   const emailPattern = /\S+@\S+\.\S+/;
   const normalizedEmail = draft.email.trim().toLowerCase();
   const canCreate =
@@ -1599,19 +2172,20 @@ function AuthPage({ intent, profile, onBack, onCreate, onLogin, onSubmit, error,
         <p>开始使用 Agent 团队构建可运行、可审查、可部署的 AI Native 应用。</p>
 
         <button
-          className="google-auth"
+          className="demo-auth"
           type="button"
           onClick={() =>
             setDraft((value) => ({
               ...value,
-              name: value.name || "he0yan BuilderOS",
-              email: value.email || "he0yan@builderos.demo",
-              password: value.password || "builderos2026",
+              name: value.name || demoAccount.name,
+              email: demoAccount.email,
+              password: demoAccount.password,
+              goal: value.goal || demoAccount.goal,
             }))
           }
         >
           <Globe2 size={18} />
-          填充演示账号
+          使用评审演示账号
         </button>
 
         <div className="auth-separator">
@@ -1640,12 +2214,21 @@ function AuthPage({ intent, profile, onBack, onCreate, onLogin, onSubmit, error,
         </label>
         <label>
           密码
-          <input
-            type="password"
-            value={draft.password}
-            placeholder="至少 6 位，用于再次登录"
-            onChange={(event) => setDraft((value) => ({ ...value, password: event.target.value }))}
-          />
+          <div className="password-field">
+            <input
+              type={passwordVisible ? "text" : "password"}
+              value={draft.password}
+              placeholder="至少 6 位，用于再次登录"
+              onChange={(event) => setDraft((value) => ({ ...value, password: event.target.value }))}
+            />
+            <button
+              type="button"
+              aria-label={passwordVisible ? "隐藏密码" : "显示密码"}
+              onClick={() => setPasswordVisible((value) => !value)}
+            >
+              {passwordVisible ? <EyeOff size={18} /> : <Eye size={18} />}
+            </button>
+          </div>
         </label>
 
         {error && (
@@ -1721,6 +2304,7 @@ type HomeViewProps = {
   teamMode: boolean;
   ownerName: string;
   workMode: WorkMode;
+  onCreateProjectVersion: (projectId: number) => void;
   onDownloadProject: (project: Project) => void;
   onPromptChange: (value: string) => void;
   onPublishProject: (projectId: number) => void;
@@ -1751,6 +2335,7 @@ function HomeView({
   teamMode,
   ownerName,
   workMode,
+  onCreateProjectVersion,
   onDownloadProject,
   onPromptChange,
   onPublishProject,
@@ -1767,10 +2352,10 @@ function HomeView({
   return (
     <section className="home-view">
       <div className="mode-pill">
-        <PlayCircle size={15} />
-        <span>Introduce Video</span>
+        <Sparkles size={15} />
+        <span>Agent Team</span>
         <span>·</span>
-        <span>Create videos with Seedance 2.0</span>
+        <span>RAG grounded</span>
         <X size={15} />
       </div>
 
@@ -1872,43 +2457,47 @@ function HomeView({
           </div>
         )}
 
-        <div className="attachment-strip">
-          <span className="file-thumb image" />
-          <span className="file-thumb file" />
-          <span className="file-thumb github" />
-          <span className="file-thumb image" />
-          <span className="file-thumb file" />
-          <button aria-label="移除附件">
-            <X size={15} />
-          </button>
-        </div>
+        {(attachmentOpen || connectorOpen) && (
+          <div className="attachment-strip">
+            <span className="file-thumb image" />
+            <span className="file-thumb file" />
+            <span className="file-thumb github" />
+            <span className="file-thumb image" />
+            <span className="file-thumb file" />
+            <button aria-label="移除附件">
+              <X size={15} />
+            </button>
+          </div>
+        )}
       </div>
 
       <div className="quick-prompt-row">
-        {quickPrompts.map((item) => (
-          <button key={item} onClick={() => onQuickPrompt(item)}>
+        {quickPrompts.map((item, index) => (
+          <button key={item} title={item} onClick={() => onQuickPrompt(item)}>
             <Sparkles size={16} />
-            <span>{item}</span>
+            <span>{quickPromptLabels[index] || item}</span>
           </button>
         ))}
       </div>
 
-      {(isBuilding || projects.length > 0) && (
+      {isBuilding && (
         <div className="build-console">
           <div className="console-header">
             <div>
               <span className="eyebrow">Agent Run</span>
-              <h2>{isBuilding ? "正在构建" : "最近项目"}</h2>
+              <h2>正在构建</h2>
             </div>
-            <div className="device-switch">
-              <button className="active">
-                <Monitor size={16} />
-                桌面
-              </button>
-              <button>
-                <Smartphone size={16} />
-                移动端
-              </button>
+            <div className="console-header-actions">
+              <div className="device-switch">
+                <button className="active">
+                  <Monitor size={16} />
+                  桌面
+                </button>
+                <button>
+                  <Smartphone size={16} />
+                  移动端
+                </button>
+              </div>
             </div>
           </div>
 
@@ -1949,7 +2538,12 @@ function HomeView({
               </div>
 
               {selectedProject && !isBuilding && (
-                <GeneratedSummary project={selectedProject} onDownloadProject={onDownloadProject} />
+                <GeneratedSummary
+                  project={selectedProject}
+                  onCreateProjectVersion={onCreateProjectVersion}
+                  onDownloadProject={onDownloadProject}
+                  onPublishProject={onPublishProject}
+                />
               )}
             </div>
           </div>
@@ -2006,10 +2600,14 @@ function GeneratedPreview({ project }: { project: Project }) {
 
 function GeneratedSummary({
   project,
+  onCreateProjectVersion,
   onDownloadProject,
+  onPublishProject,
 }: {
   project: Project;
+  onCreateProjectVersion: (projectId: number) => void;
   onDownloadProject: (project: Project) => void;
+  onPublishProject: (projectId: number) => void;
 }) {
   const [activeTab, setActiveTab] = useState<SourceTab>("html");
   const files = getGeneratedFiles(project);
@@ -2018,6 +2616,22 @@ function GeneratedSummary({
   const [copiedFile, setCopiedFile] = useState(false);
   const source = project.generated[activeTab];
   const activeFile = files.find((file) => file.path === activeFilePath) ?? files[0];
+  const versions = project.versions?.length
+    ? project.versions
+    : [
+        {
+          id: `project-${project.id}-v1`,
+          label: "版本 1",
+          summary: "初始构建版本。",
+          status: project.status === "已发布" ? "published" : "ready",
+          createdAt: new Date().toISOString(),
+          fileCount: files.length,
+          sourceBytes: files.reduce((total, file) => total + file.content.length, 0),
+          previewUrl: project.previewUrl,
+        } satisfies ProjectVersion,
+      ];
+  const publicPreviewUrl = project.publishedUrl || `${window.location.origin}${project.previewUrl || `/api/preview/${project.id}`}`;
+  const llmInfo = project.generated.llm;
 
   async function copySource() {
     await navigator.clipboard.writeText(source);
@@ -2045,6 +2659,26 @@ function GeneratedSummary({
             <span key={feature}>{feature}</span>
           ))}
         </div>
+      </div>
+
+      <div className="summary-column llm-summary">
+        <span className="eyebrow">Model Gateway</span>
+        <h3>{llmInfo?.used ? "真实模型生成" : "模板降级生成"}</h3>
+        <dl>
+          <div>
+            <dt>Provider</dt>
+            <dd>{llmInfo?.providerLabel || llmInfo?.provider || "BuilderOS"}</dd>
+          </div>
+          <div>
+            <dt>Model</dt>
+            <dd>{llmInfo?.model || "deterministic-template"}</dd>
+          </div>
+          <div>
+            <dt>Endpoint</dt>
+            <dd>{llmInfo?.baseUrlHost || "local fallback"}</dd>
+          </div>
+        </dl>
+        {!llmInfo?.used && <p>{llmInfo?.fallbackReason || "未配置真实 LLM，使用稳定模板生成。"}</p>}
       </div>
 
       <div className="summary-column">
@@ -2096,13 +2730,75 @@ function GeneratedSummary({
         </div>
       )}
 
+      <div className="summary-column lifecycle-panel">
+        <div className="panel-title-row compact">
+          <div>
+            <span className="eyebrow">Version & Publish</span>
+            <h3>版本与发布</h3>
+          </div>
+          <span className="status-pill">{project.status}</span>
+        </div>
+        <div className="lifecycle-actions">
+          <button onClick={() => onCreateProjectVersion(project.id)}>
+            <Layers size={14} />
+            保存版本
+          </button>
+          <button onClick={() => onPublishProject(project.id)}>
+            <Rocket size={14} />
+            {project.status === "已发布" ? "重新发布" : "发布预览"}
+          </button>
+          <a href={publicPreviewUrl} target="_blank" rel="noreferrer">
+            <Globe2 size={14} />
+            打开链接
+          </a>
+        </div>
+        <div className="version-list">
+          {versions.slice(0, 4).map((version) => (
+            <div key={version.id}>
+              <strong>{version.label}</strong>
+              <span>{version.status === "published" ? "已发布" : "可发布"}</span>
+              <small>{version.summary}</small>
+              <em>
+                {version.fileCount} files · {formatBytes(version.sourceBytes)}
+              </em>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="summary-column publish-check-panel">
+        <span className="eyebrow">Publish Checks</span>
+        <div className="publish-check-list">
+          {(project.publishChecks?.length
+            ? project.publishChecks
+            : [
+                { label: "预览 HTML", status: "passed", detail: "iframe 内已可操作，发布后生成独立 URL。" },
+                { label: "源码目录", status: "passed", detail: `${files.length} 个文件可浏览、复制和下载。` },
+                { label: "增长模块", status: "warning", detail: "SEO、Ads、GA4 为预留集成，当前为 Demo 级能力。" },
+              ] as PublishCheck[]
+          ).map((check) => (
+            <div key={check.label}>
+              <span className={check.status === "passed" ? "health-dot healthy" : "health-dot degraded"} />
+              <strong>{check.label}</strong>
+              <small>{check.detail}</small>
+            </div>
+          ))}
+        </div>
+      </div>
+
       <div className="artifact-panel">
         <div className="artifact-header">
           <div>
             <span className="eyebrow">Project Files</span>
             <h3>生成项目目录</h3>
           </div>
-          <small>{project.artifactPath || "browser-local/generated-project"}</small>
+          <div className="artifact-actions">
+            <small>{project.artifactPath || "browser-local/generated-project"}</small>
+            <button onClick={() => onDownloadProject(project)}>
+              <Download size={14} />
+              下载源码包
+            </button>
+          </div>
         </div>
         <div className="artifact-layout">
           <div className="file-tree" aria-label="生成文件列表">
@@ -2156,43 +2852,153 @@ function GeneratedSummary({
   );
 }
 
-function ResourcesView() {
+type ResourcesViewProps = {
+  cloudResources: CloudResource[];
+  platformStatus: PlatformStatus | null;
+  projects: Project[];
+  onProvisionResource: (resourceId: string) => void;
+};
+
+function ResourcesView({ cloudResources, platformStatus, projects, onProvisionResource }: ResourcesViewProps) {
+  const [activeType, setActiveType] = useState("All");
+  const fallbackResources: CloudResource[] = resourceItems.map((item) => ({
+    id: item.title,
+    type: "Resource",
+    title: item.title,
+    provider: "BuilderOS",
+    status: "ready",
+    scope: "Workspace",
+    description: item.meta,
+    endpoint: "-",
+    usage: "待连接",
+    updatedAt: "本地",
+    actions: ["配置"],
+  }));
+  const resources = cloudResources.length ? cloudResources : fallbackResources;
+  const resourceTypes = ["All", ...Array.from(new Set(resources.map((resource) => resource.type)))];
+  const visibleResources =
+    activeType === "All" ? resources : resources.filter((resource) => resource.type === activeType);
+  const connectedCount = resources.filter((resource) => resource.status === "connected").length;
+  const latestProject = projects[0];
+  const llmStatus = platformStatus?.llm;
+  const llmLabel = llmStatus?.activeProvider?.label || "模板降级";
+
   return (
     <section className="section-view">
-      <div className="section-heading">
-        <span className="eyebrow">Resources</span>
-        <h1>资源</h1>
+      <div className="section-heading with-action">
+        <div>
+          <span className="eyebrow">BuilderOS Cloud</span>
+          <h1>资源与云能力</h1>
+        </div>
+        <div className="resource-tabs" aria-label="资源类型">
+          {resourceTypes.map((type) => (
+            <button key={type} className={activeType === type ? "active" : ""} onClick={() => setActiveType(type)}>
+              {type}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="resource-grid">
-        {resourceItems.map((item) => {
-          const Icon = item.icon;
+      <div className="cloud-overview">
+        <div className="cloud-hero-panel">
+          <span className="eyebrow">Atoms 对标重点</span>
+          <h2>把“生成应用”扩展成“生成并运营应用”</h2>
+          <p>
+            Atoms 的关键不只是代码生成，还包括 Cloud 资源、用户系统、数据库、应用存储、GitHub、支付、发布和增长模块。BuilderOS
+            在 Demo 中把这些能力做成可见、可点击、可持久化的控制台，并支持通义千问与第三方中转站的真实模型网关。
+          </p>
+        </div>
+        <div className="cloud-stats">
+          <Stat label="已连接资源" value={`${connectedCount}/${resources.length}`} icon={PlugZap} />
+          <Stat label="模型网关" value={llmLabel} icon={Brain} />
+          <Stat label="生成项目" value={String(projects.length)} icon={FolderKanban} />
+          <Stat label="服务存储" value={platformStatus?.storage.authStore === "mysql" ? "MySQL" : "JSON"} icon={Database} />
+          <Stat label="发布应用" value={String(projects.filter((project) => project.status === "已发布").length)} icon={Rocket} />
+        </div>
+      </div>
+
+      <div className="cloud-console">
+        {visibleResources.map((resource) => {
+          const Icon = resourceIconForType(resource.type);
           return (
-            <button className="resource-card" key={item.title}>
-              <span className="resource-icon" style={{ color: item.accent }}>
-                <Icon size={23} />
-              </span>
-              <strong>{item.title}</strong>
-              <small>{item.meta}</small>
-            </button>
+            <article className="cloud-resource-card" key={resource.id}>
+              <div className="cloud-card-head">
+                <span className="resource-icon">
+                  <Icon size={22} />
+                </span>
+                <div>
+                  <strong>{resource.title}</strong>
+                  <small>
+                    {resource.provider} · {resource.scope}
+                  </small>
+                </div>
+                <span className={`cloud-status ${resource.status}`}>{resourceStatusLabel(resource.status)}</span>
+              </div>
+              <p>{resource.description}</p>
+              <dl>
+                <div>
+                  <dt>Endpoint</dt>
+                  <dd>{resource.endpoint}</dd>
+                </div>
+                <div>
+                  <dt>Usage</dt>
+                  <dd>{resource.usage}</dd>
+                </div>
+                <div>
+                  <dt>Updated</dt>
+                  <dd>{resource.updatedAt}</dd>
+                </div>
+              </dl>
+              <div className="cloud-action-row">
+                {resource.actions.slice(0, 3).map((action) => (
+                  <span key={action}>{action}</span>
+                ))}
+                <button onClick={() => onProvisionResource(resource.id)}>
+                  <PlugZap size={14} />
+                  {resource.status === "connected" ? "重新检查" : "连接"}
+                </button>
+              </div>
+            </article>
           );
         })}
       </div>
 
-      <div className="wallet-panel">
+      <div className="wallet-panel cloud-workflow-panel">
         <div>
-          <span className="eyebrow">Cloud & AI Wallet</span>
-          <h2>额度与云资源</h2>
+          <span className="eyebrow">Current App Binding</span>
+          <h2>当前项目资源绑定</h2>
         </div>
-        <div className="wallet-stats">
-          <Stat label="积分" value="15" icon={Gem} />
-          <Stat label="云额度" value="$26" icon={Cloud} />
-          <Stat label="私有项目" value="3" icon={LockKeyhole} />
-          <Stat label="自动化任务" value="8" icon={Zap} />
+        <div className="resource-binding">
+          <div>
+            <strong>{latestProject?.title || "还没有项目"}</strong>
+            <small>{latestProject ? `${latestProject.status} · ${latestProject.artifactPath || "browser-local"}` : "先在首页生成一个应用"}</small>
+          </div>
+          <div className="binding-flow" aria-label="应用资源流">
+            {["Prompt", "Agent Run", "Files", "Cloud", "Publish", "Growth"].map((step) => (
+              <span key={step}>{step}</span>
+            ))}
+          </div>
         </div>
       </div>
     </section>
   );
+}
+
+function resourceIconForType(type: string): LucideIcon {
+  const normalized = type.toLowerCase();
+  if (normalized.includes("ai")) return Brain;
+  if (normalized.includes("database")) return Database;
+  if (normalized.includes("users")) return Users;
+  if (normalized.includes("storage")) return Cloud;
+  if (normalized.includes("integration")) return PlugZap;
+  if (normalized.includes("growth")) return Megaphone;
+  return Compass;
+}
+
+function resourceStatusLabel(status: CloudResource["status"]) {
+  if (status === "connected") return "已连接";
+  if (status === "degraded") return "异常";
+  return "待配置";
 }
 
 function formatDateTime(value?: string) {
@@ -2225,15 +3031,578 @@ function formatDuration(value: number) {
   return `${(value / 1000).toFixed(2)} s`;
 }
 
+function cleanAgentResultText(value: string) {
+  const text = String(value || "").trim();
+  if (!text.startsWith("{")) {
+    return text;
+  }
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed.summary === "string") {
+      return parsed.summary;
+    }
+  } catch {
+    const match = text.match(/["']summary["']\s*:\s*["']([^"']+)/);
+    if (match?.[1]) {
+      return match[1];
+    }
+  }
+  return text.replace(/[{}"]/g, " ").replace(/\s+/g, " ").trim();
+}
+
+type OrchestrationViewProps = {
+  orchestrations: AgentOrchestration[];
+  selectedId: string;
+  llmStatus?: LlmStatus;
+  selectedLlmProvider: string;
+  onSelect: (id: string) => void;
+  onSaveOrchestrations: (items: AgentOrchestration[], selectedId?: string) => void;
+  onRunResult: (result: OrchestrationRunResponse) => void;
+};
+
+const emptyStepDraft: OrchestrationStep = {
+  id: "draft",
+  agent: "合规审查 Agent",
+  role: "质量审查",
+  action: "检查输出是否符合业务目标、证据约束和发布标准",
+  output: "审查结论",
+  tool: "Evaluator",
+  guardrail: "发现风险时阻断发布",
+};
+
+function createLocalId(prefix: string) {
+  return `${prefix}-${Date.now()}-${Math.floor(Math.random() * 10000)}`;
+}
+
+function OrchestrationView({
+  orchestrations,
+  selectedId,
+  llmStatus,
+  selectedLlmProvider,
+  onSelect,
+  onSaveOrchestrations,
+  onRunResult,
+}: OrchestrationViewProps) {
+  const active = orchestrations.find((item) => item.id === selectedId) || orchestrations[0] || defaultOrchestrations[0];
+  const [draftStep, setDraftStep] = useState<OrchestrationStep>(emptyStepDraft);
+  const [running, setRunning] = useState(false);
+  const [executionIndex, setExecutionIndex] = useState(-1);
+  const [runError, setRunError] = useState("");
+  const totalTransitions = Math.max(0, active.steps.length - 1);
+  const lastRun = active.lastRun;
+  const activeExecutionStep = running ? active.steps[Math.max(0, executionIndex)] : null;
+  const resultTrace = lastRun?.trace ?? [];
+  const finalReport = lastRun?.finalReport;
+  const configuredProviders = llmStatus?.providers?.filter((provider) => provider.configured) ?? [];
+  const selectedRouteLabel =
+    selectedLlmProvider === "auto"
+      ? `Auto: ${llmStatus?.activeProvider?.model || "qwen-plus"}`
+      : configuredProviders.find((provider) => provider.id === selectedLlmProvider)?.model || selectedLlmProvider;
+
+  function stepModelLabel(step: OrchestrationStep) {
+    const route = step.llmProvider || selectedLlmProvider;
+    if (!route || route === "inherit") {
+      return selectedRouteLabel;
+    }
+    if (route === "auto") {
+      return `Auto: ${llmStatus?.activeProvider?.model || "qwen-plus"}`;
+    }
+    return configuredProviders.find((provider) => provider.id === route)?.model || route;
+  }
+
+  function saveActive(patch: Partial<AgentOrchestration>) {
+    const nextItems = orchestrations.map((item) =>
+      item.id === active.id
+        ? {
+            ...item,
+            ...patch,
+            updatedAt: "刚刚",
+          }
+        : item,
+    );
+    onSaveOrchestrations(nextItems, active.id);
+  }
+
+  function updateStep(stepId: string, patch: Partial<OrchestrationStep>) {
+    saveActive({
+      status: "draft",
+      steps: active.steps.map((step) => (step.id === stepId ? { ...step, ...patch } : step)),
+    });
+  }
+
+  function addStep() {
+    if (!draftStep.agent.trim() || !draftStep.action.trim()) {
+      return;
+    }
+    const nextStep = { ...draftStep, id: createLocalId("step") };
+    saveActive({
+      status: "draft",
+      steps: [...active.steps, nextStep],
+    });
+    setDraftStep({ ...emptyStepDraft, id: "draft" });
+  }
+
+  function removeStep(stepId: string) {
+    if (active.steps.length <= 2) {
+      return;
+    }
+    saveActive({
+      status: "draft",
+      steps: active.steps.filter((step) => step.id !== stepId),
+    });
+  }
+
+  function stepExecutionState(index: number) {
+    if (running) {
+      if (index < executionIndex) return "done";
+      if (index === executionIndex) return "running";
+      return "pending";
+    }
+    return lastRun ? "done" : "pending";
+  }
+
+  function createOrchestration() {
+    const source = active || defaultOrchestrations[0];
+    const nextItem: AgentOrchestration = {
+      ...source,
+      id: createLocalId("flow"),
+      name: "自定义 Agent 编排",
+      description: "从现有链路复制后自由调整 Agent、动作、工具和交付物。",
+      status: "draft",
+      owner: "Reviewer Workspace",
+      updatedAt: "刚刚",
+      steps: source.steps.slice(0, 4).map((step) => ({ ...step, id: createLocalId("step") })),
+      lastRun: null,
+    };
+    onSaveOrchestrations([nextItem, ...orchestrations], nextItem.id);
+  }
+
+  function runOrchestration() {
+    if (running) {
+      return;
+    }
+    setRunError("");
+    setRunning(true);
+    setExecutionIndex(0);
+    const timer = window.setInterval(() => {
+      setExecutionIndex((value) => Math.min(value + 1, Math.max(0, active.steps.length - 1)));
+    }, 900);
+
+    apiRequest<OrchestrationRunResponse>(`/api/orchestrations/${encodeURIComponent(active.id)}/run`, {
+      method: "POST",
+      body: JSON.stringify({
+        orchestration: active,
+        task: "请基于知识库中的岗位需求和候选人简历，筛选适合 Java 后端工程师岗位的人选，输出排序、依据、风险和面试问题。",
+        llmProvider: selectedLlmProvider,
+      }),
+    })
+      .then((result) => {
+        onRunResult(result);
+        setExecutionIndex(active.steps.length);
+      })
+      .catch((error: Error) => {
+        setRunError(error.message || "真实 Agent 链执行失败，请检查 LLM 网关和知识库配置。");
+      })
+      .finally(() => {
+        window.clearInterval(timer);
+        setRunning(false);
+      });
+  }
+
+  return (
+    <section className="section-view">
+      <div className="section-heading with-action">
+        <div>
+          <span className="eyebrow">Agent Orchestration</span>
+          <h1>Agent 自由编排</h1>
+        </div>
+        <div className="orchestration-actions">
+          <button onClick={createOrchestration}>
+            <Sparkles size={16} />
+            新建编排
+          </button>
+          <button onClick={() => onSaveOrchestrations(orchestrations, active.id)}>
+            <CheckCircle2 size={16} />
+            保存配置
+          </button>
+          <button className="primary-action" onClick={runOrchestration} disabled={running}>
+            <Zap size={16} />
+            {running ? "试运行中" : "试运行链路"}
+          </button>
+        </div>
+      </div>
+
+      <div className="execution-workbench">
+        <article className="task-brief-panel">
+          <div className="panel-bar">
+            <span className="eyebrow">任务说明</span>
+            <div>
+              <button onClick={createOrchestration}>编辑</button>
+              <button className="primary-action" onClick={runOrchestration} disabled={running}>
+                预览
+              </button>
+            </div>
+          </div>
+          <div className="task-brief-body">
+            <h2>{active.domain.includes("招聘") ? "后端工程师候选人筛选指导手册" : `${active.domain} 执行指导手册`}</h2>
+            <section>
+              <h3>目标和适用场景</h3>
+              <p>
+                用户希望基于知识库、Agent 工具和结构化流程，把复杂任务拆成可复用的多 Agent
+                协作链路，并在执行后得到可审查的结果。
+              </p>
+            </section>
+            <section>
+              <h3>编排要求</h3>
+              <ul>
+                <li>总控 Agent 只负责拆解任务和转交，不直接生成最终结论。</li>
+                <li>每个子 Agent 必须输出明确交付物，并把结果交给下一步。</li>
+                <li>评分、推荐或发布类结论必须保留证据、风险和下一步动作。</li>
+              </ul>
+            </section>
+            <section>
+              <h3>当前链路</h3>
+              <p>
+                该配置包含 {active.steps.length} 个 Agent，按串行链路完成
+                {active.steps.map((step) => step.role).join("、")}。
+              </p>
+            </section>
+          </div>
+          <div className="brief-actions">
+            <button onClick={createOrchestration}>
+              <Activity size={16} />
+              重新生成
+            </button>
+            <button className="primary-action" onClick={runOrchestration} disabled={running}>
+              <Rocket size={16} />
+              开始执行
+            </button>
+          </div>
+        </article>
+
+        <article className="task-flow-panel">
+          <div className="panel-bar">
+            <span>
+              <Activity size={18} />
+              任务流程
+            </span>
+            <em className={running ? "running" : lastRun ? "done" : ""}>
+              {running ? "执行中" : lastRun ? "已完成" : "待执行"}
+            </em>
+          </div>
+          <div className="flow-legend">
+            <span><i className="pending" />待执行</span>
+            <span><i className="running" />执行中</span>
+            <span><i className="done" />已完成</span>
+          </div>
+          <div className="vertical-flow">
+            {active.steps.map((step, index) => {
+              const state = stepExecutionState(index);
+              return (
+                <div className={`vertical-step ${state}`} key={step.id}>
+                  <div className="vertical-node">
+                    <span>{state === "done" ? "✓" : ""}</span>
+                    <div>
+                      <strong>{step.role}</strong>
+                      <small>{step.agent}</small>
+                    </div>
+                  </div>
+                  {index < active.steps.length - 1 && <div className="vertical-edge" />}
+                </div>
+              );
+            })}
+          </div>
+        </article>
+
+        <article className="task-result-panel">
+          <div className="panel-bar">
+            <span>
+              <FileText size={18} />
+              任务结果
+            </span>
+          </div>
+          {running ? (
+            <div className="result-waiting">
+              <Activity size={34} />
+              <strong>{activeExecutionStep?.role || "正在执行"}</strong>
+              <span>{activeExecutionStep?.agent || "Agent 正在调用 LLM 并读取知识库..."}</span>
+            </div>
+          ) : runError ? (
+            <div className="result-waiting error">
+              <FileText size={34} />
+              <strong>真实执行失败</strong>
+              <span>{runError}</span>
+            </div>
+          ) : resultTrace.length ? (
+            <div className="result-summary-list">
+              <div className="result-highlight">
+                <strong>真实 Agent 执行完成</strong>
+                <span>
+                  {formatDuration(lastRun?.durationMs ?? 0)} · {resultTrace.length} 个 Agent ·{" "}
+                  {lastRun?.evidence?.length ?? 0} 条知识库证据
+                </span>
+                {resultTrace[0]?.llm && (
+                  <small>
+                    LLM: {resultTrace[0].llm.providerLabel} / {resultTrace[0].llm.model}
+                  </small>
+                )}
+              </div>
+              {finalReport?.recommendations?.slice(0, 3).map((candidate) => (
+                <div className="result-card candidate-result" key={candidate.name}>
+                  <strong>
+                    {candidate.name}
+                    <em>{candidate.score}</em>
+                  </strong>
+                  <p>{candidate.decision}</p>
+                  <small>{candidate.reasons.slice(0, 2).join("；")}</small>
+                </div>
+              ))}
+              {resultTrace.slice(-2).map((item) => (
+                <div className="result-card" key={item.stepId}>
+                  <strong>{item.agent}</strong>
+                  <p>{cleanAgentResultText(item.result)}</p>
+                  <small>
+                    {item.llm ? `${item.llm.providerLabel} · ${item.evidenceTitles?.slice(0, 2).join(" / ")}` : item.evidenceTitles?.slice(0, 2).join(" / ")}
+                  </small>
+                </div>
+              ))}
+              <div className="result-report">
+                <span>最终交付</span>
+                <p>{finalReport?.summary || "已生成候选人推荐、评分依据、面试问题和风险说明。"}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="result-waiting empty">
+              <FileText size={34} />
+              <span>等待任务结果...</span>
+            </div>
+          )}
+        </article>
+      </div>
+
+      <div className="config-section-title">
+        <span className="eyebrow">Workflow Builder</span>
+        <h2>编排配置</h2>
+      </div>
+
+      <div className="orchestration-layout">
+        <aside className="orchestration-library">
+          <div className="library-tabs">
+            <button className="active">模板库</button>
+            <button>
+              我的配置 <strong>{orchestrations.length}</strong>
+            </button>
+          </div>
+          <button className="new-flow-button" onClick={createOrchestration}>
+            <Sparkles size={17} />
+            新建编排
+          </button>
+          <div className="flow-list">
+            {orchestrations.map((item) => (
+              <button
+                key={item.id}
+                className={item.id === active.id ? "flow-card active" : "flow-card"}
+                onClick={() => onSelect(item.id)}
+              >
+                <span>
+                  <strong>{item.name}</strong>
+                  <small>{item.domain}</small>
+                </span>
+                <em>{item.status === "ready" ? "配置完整" : "草稿"}</em>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <div className="orchestration-main">
+          <div className="flow-header-panel">
+            <div>
+              <span className="eyebrow">执行链路</span>
+              <input
+                value={active.name}
+                aria-label="编排名称"
+                onChange={(event) => saveActive({ name: event.target.value, status: "draft" })}
+              />
+              <p>{active.description}</p>
+            </div>
+            <div className="flow-stats">
+              <Stat label="Agent" value={String(active.steps.length)} icon={Bot} />
+              <Stat label="转交" value={String(totalTransitions)} icon={ArrowRight} />
+              <Stat label="状态" value={active.status === "ready" ? "Ready" : "Draft"} icon={CheckCircle2} />
+            </div>
+          </div>
+
+          <div className="flow-canvas" aria-label="Agent 执行链路">
+            {active.steps.map((step, index) => (
+              <div className="flow-node-group" key={step.id}>
+                <article className={index === 0 ? "flow-node lead" : "flow-node"}>
+                  <span>{index === 0 ? "总控" : index}</span>
+                  <small>{step.role}</small>
+                  <strong>{step.agent}</strong>
+                  <em>{stepModelLabel(step)}</em>
+                </article>
+                {index < active.steps.length - 1 && (
+                  <div className="flow-edge">
+                    <ArrowRight size={20} />
+                    <small>{step.output}</small>
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+
+          <div className="orchestration-step-list">
+            {active.steps.map((step, index) => (
+              <article className="agent-config-card" key={step.id}>
+                <div className="agent-config-head">
+                  <span className="step-index">{index + 1}</span>
+                  <div>
+                    <strong>{step.agent}</strong>
+                    <small>{step.role} · {stepModelLabel(step)}</small>
+                  </div>
+                  <button aria-label="删除步骤" onClick={() => removeStep(step.id)} disabled={active.steps.length <= 2}>
+                    <Trash2 size={16} />
+                  </button>
+                </div>
+
+                <div className="agent-config-grid">
+                  <label>
+                    Agent 名称
+                    <input value={step.agent} onChange={(event) => updateStep(step.id, { agent: event.target.value })} />
+                  </label>
+                  <label>
+                    角色职责
+                    <input value={step.role} onChange={(event) => updateStep(step.id, { role: event.target.value })} />
+                  </label>
+                  <label>
+                    AI 模型
+                    <select
+                      value={step.llmProvider || "inherit"}
+                      onChange={(event) =>
+                        updateStep(step.id, { llmProvider: event.target.value === "inherit" ? undefined : event.target.value })
+                      }
+                    >
+                      <option value="inherit">继承顶部路由（{selectedRouteLabel}）</option>
+                      <option value="auto">Auto：优先 qwen-plus</option>
+                      {configuredProviders.map((provider) => (
+                        <option key={provider.id} value={provider.id}>
+                          {provider.model} · {provider.label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label>
+                    工具
+                    <input value={step.tool} onChange={(event) => updateStep(step.id, { tool: event.target.value })} />
+                  </label>
+                  <label className="wide">
+                    执行动作
+                    <input value={step.action} onChange={(event) => updateStep(step.id, { action: event.target.value })} />
+                  </label>
+                  <label>
+                    输出产物
+                    <input value={step.output} onChange={(event) => updateStep(step.id, { output: event.target.value })} />
+                  </label>
+                  <label className="wide prompt-field">
+                    系统提示词
+                    <textarea
+                      value={step.systemPrompt || defaultStepSystemPrompt(step)}
+                      onChange={(event) => updateStep(step.id, { systemPrompt: event.target.value })}
+                    />
+                  </label>
+                  <label className="wide">
+                    Guardrail 校验
+                    <input
+                      value={step.guardrail}
+                      onChange={(event) => updateStep(step.id, { guardrail: event.target.value })}
+                    />
+                  </label>
+                </div>
+              </article>
+            ))}
+          </div>
+
+          <div className="step-add-panel">
+            <label>
+              新 Agent
+              <input
+                value={draftStep.agent}
+                onChange={(event) => setDraftStep((value) => ({ ...value, agent: event.target.value }))}
+              />
+            </label>
+            <label>
+              动作
+              <input
+                value={draftStep.action}
+                onChange={(event) => setDraftStep((value) => ({ ...value, action: event.target.value }))}
+              />
+            </label>
+            <label>
+              输出
+              <input
+                value={draftStep.output}
+                onChange={(event) => setDraftStep((value) => ({ ...value, output: event.target.value }))}
+              />
+            </label>
+            <button className="primary-action" onClick={addStep}>
+              <Sparkles size={16} />
+              加入链路
+            </button>
+          </div>
+
+          <div className="run-trace-panel">
+            <div>
+              <span className="eyebrow">Execution Trace</span>
+              <h2>试运行追踪</h2>
+            </div>
+            {lastRun ? (
+              <div className="trace-list">
+                <div className="trace-summary">
+                  <strong>{lastRun.status === "completed" ? "运行完成" : "运行中"}</strong>
+                  <span>
+                    {formatDateTime(lastRun.startedAt)} · {formatDuration(lastRun.durationMs)}
+                  </span>
+                </div>
+	                {lastRun.trace.map((item, index) => (
+	                  <article key={`${lastRun.id}-${item.stepId}`}>
+	                    <span>{index + 1}</span>
+	                    <div>
+	                      <strong>{item.agent}</strong>
+	                      <p>{item.action}</p>
+	                    </div>
+	                    <em>{formatDuration(item.durationMs)}</em>
+	                    <small>
+                        {cleanAgentResultText(item.result)}
+                        {item.llm ? ` · ${item.llm.providerLabel}/${item.llm.model}` : ""}
+                        {item.validation?.detail ? ` · ${item.validation.detail}` : ""}
+                      </small>
+	                  </article>
+	                ))}
+	              </div>
+            ) : (
+              <div className="empty-trace">
+                <Bot size={28} />
+                <span>点击“试运行链路”生成一条可回放的 Agent 执行轨迹。</span>
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+    </section>
+  );
+}
+
 type DataViewProps = {
   knowledgeSources: KnowledgeSource[];
+  orchestrations: AgentOrchestration[];
   platformStatus: PlatformStatus | null;
   projects: Project[];
   runRecords: RunRecord[];
 };
 
-function DataView({ knowledgeSources, platformStatus, projects, runRecords }: DataViewProps) {
+function DataView({ knowledgeSources, orchestrations, platformStatus, projects, runRecords }: DataViewProps) {
   const latestRun = runRecords[0];
+  const llmLabel = platformStatus?.llm?.activeProvider?.label || "模板降级";
 
   return (
     <section className="section-view">
@@ -2250,6 +3619,13 @@ function DataView({ knowledgeSources, platformStatus, projects, runRecords }: Da
           icon={Brain}
         />
         <Stat label="运行记录" value={String(platformStatus?.storage.runRecords ?? runRecords.length)} icon={Activity} />
+        <Stat
+          label="编排链路"
+          value={String(platformStatus?.storage.orchestrations ?? orchestrations.length)}
+          icon={Settings2}
+        />
+        <Stat label="云资源" value={String(platformStatus?.storage.cloudResources ?? 0)} icon={Cloud} />
+        <Stat label="模型网关" value={llmLabel} icon={Brain} />
         <Stat label="API 内存" value={`${platformStatus?.process.memoryMb ?? 0} MB`} icon={Server} />
       </div>
 
@@ -2335,6 +3711,7 @@ function DataView({ knowledgeSources, platformStatus, projects, runRecords }: Da
                   <span>{run.output.pages} pages</span>
                   <span>{run.output.features} features</span>
                   <span>{formatBytes(run.output.sourceBytes)}</span>
+                  <span>{run.output.llm?.providerLabel || run.output.llm?.provider || "template"}</span>
                 </div>
                 <div className="run-knowledge">
                   {run.knowledgeHits.map((hit) => (
@@ -2353,14 +3730,17 @@ function DataView({ knowledgeSources, platformStatus, projects, runRecords }: Da
 type KnowledgeViewProps = {
   knowledgeSources: KnowledgeSource[];
   onSaveKnowledgeSources: (sources: KnowledgeSource[]) => void;
+  onUploadKnowledgeFiles: (files: File[]) => Promise<KnowledgeUploadResponse>;
 };
 
-function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources }: KnowledgeViewProps) {
+function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources, onUploadKnowledgeFiles }: KnowledgeViewProps) {
   const [draftTitle, setDraftTitle] = useState("ROOT/AI Native 评审关注点");
   const [draftContent, setDraftContent] = useState(
     "评审会关注完成度、工程思维、用户体验、创新性和可交付性。Demo 应展示真实交互、持久化、核心主流程和至少一个延展能力。",
   );
   const [draftTags, setDraftTags] = useState("ROOT,Review,Delivery");
+  const [uploading, setUploading] = useState(false);
+  const [uploadMessage, setUploadMessage] = useState("");
 
   function addSource() {
     const title = draftTitle.trim();
@@ -2387,6 +3767,24 @@ function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources }: KnowledgeVi
 
   function removeSource(sourceId: number) {
     onSaveKnowledgeSources(knowledgeSources.filter((source) => source.id !== sourceId));
+  }
+
+  async function uploadFiles(fileList: FileList | null) {
+    const files = Array.from(fileList || []);
+    if (!files.length || uploading) {
+      return;
+    }
+    setUploading(true);
+    setUploadMessage("");
+    try {
+      const result = await onUploadKnowledgeFiles(files);
+      const chunkCount = result.parsed.reduce((total, file) => total + file.chunks, 0);
+      setUploadMessage(`已解析 ${result.parsed.length} 个文件，生成 ${chunkCount} 条知识。`);
+    } catch (error) {
+      setUploadMessage(error instanceof Error ? error.message : "文件解析失败，请检查格式。");
+    } finally {
+      setUploading(false);
+    }
   }
 
   return (
@@ -2425,12 +3823,31 @@ function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources }: KnowledgeVi
             Atoms 更强调从自然语言快速生成应用；这里增加 RAG grounding，让 Agent 在生成前先检索内部资料、作业要求和产品规则，再把命中证据带到生成结果里。
           </p>
           <div className="infra-list">
-            <span>解析</span>
-            <span>切块</span>
-            <span>召回</span>
+            <span>文件解析</span>
+            <span>文本切块</span>
+            <span>关键词召回</span>
             <span>证据聚合</span>
             <span>生成</span>
           </div>
+          <label className={uploading ? "knowledge-upload uploading" : "knowledge-upload"}>
+            <input
+              type="file"
+              multiple
+              accept=".txt,.md,.csv,.json,text/plain,text/markdown,text/csv,application/json"
+              disabled={uploading}
+              onChange={(event) => {
+                void uploadFiles(event.target.files);
+                event.currentTarget.value = "";
+              }}
+            />
+            <Upload size={20} />
+            <strong>{uploading ? "正在解析文件..." : "上传知识文件"}</strong>
+            <span>.txt / .md / .csv / .json</span>
+          </label>
+          <p className="rag-note">
+            当前实现为 keyword RAG + 文件解析；PDF/DOCX、embedding、vector DB 和 rerank 作为后续增强。
+          </p>
+          {uploadMessage && <div className="upload-message">{uploadMessage}</div>}
         </div>
       </div>
 
@@ -2447,6 +3864,11 @@ function KnowledgeView({ knowledgeSources, onSaveKnowledgeSources }: KnowledgeVi
                 <span key={tag}>{tag}</span>
               ))}
             </div>
+            {source.source && (
+              <small className="source-meta">
+                {source.source.filename} · {source.source.parser} · chunk {source.source.chunkIndex}/{source.source.chunkCount}
+              </small>
+            )}
             <button aria-label="删除知识" onClick={() => removeSource(source.id)}>
               <Trash2 size={16} />
             </button>
@@ -2508,10 +3930,10 @@ function CompareView() {
         <span className="eyebrow">Next Expansion</span>
         <h2>继续投入时的优先级</h2>
         <div className="roadmap-grid">
-          <span>1. 接入真实 LLM 代码生成 API</span>
-          <span>2. 将 RAG 从关键词召回升级为向量检索</span>
-          <span>3. 增加沙箱构建与在线预览容器</span>
-          <span>4. 接入 GitHub PR、Vercel/自托管发布流水线</span>
+          <span>1. 沙箱构建、依赖安装、自动修错和发布流水线</span>
+          <span>2. 拖拽式 DAG、失败重试、人工确认和执行审计</span>
+          <span>3. 向量 RAG、PDF/DOCX 解析、rerank 和来源引用</span>
+          <span>4. 积分、账单、充值、订阅和模型成本归因</span>
         </div>
       </div>
     </section>
@@ -2520,13 +3942,21 @@ function CompareView() {
 
 type ProjectsViewProps = {
   projects: Project[];
+  onCreateProjectVersion: (projectId: number) => void;
   onDownloadProject: (project: Project) => void;
   onPreviewProject: (projectId: number) => void;
   onPublishProject: (projectId: number) => void;
   onStartBuild: (value: string) => void;
 };
 
-function ProjectsView({ projects, onDownloadProject, onPreviewProject, onPublishProject, onStartBuild }: ProjectsViewProps) {
+function ProjectsView({
+  projects,
+  onCreateProjectVersion,
+  onDownloadProject,
+  onPreviewProject,
+  onPublishProject,
+  onStartBuild,
+}: ProjectsViewProps) {
   return (
     <section className="section-view">
       <div className="section-heading with-action">
@@ -2555,7 +3985,9 @@ function ProjectsView({ projects, onDownloadProject, onPreviewProject, onPublish
             <div className="project-row" key={project.id}>
               <div>
                 <strong>{project.title}</strong>
-                <small>{modeLabel[project.mode]} · {project.updatedAt}</small>
+                <small>
+                  {modeLabel[project.mode]} · {project.updatedAt} · 版本 {project.version || project.versions?.length || 1}
+                </small>
               </div>
               <span className="status-pill">{project.status}</span>
               <div className="project-actions">
@@ -2563,18 +3995,22 @@ function ProjectsView({ projects, onDownloadProject, onPreviewProject, onPublish
                   <Monitor size={16} />
                   预览
                 </button>
-                <button>
-                  <Github size={16} />
-                  同步
+                <button onClick={() => onCreateProjectVersion(project.id)}>
+                  <Layers size={16} />
+                  保存版本
                 </button>
                 <button onClick={() => onDownloadProject(project)}>
                   <Download size={16} />
-                  导出
+                  源码包
                 </button>
                 <button onClick={() => onPublishProject(project.id)}>
                   <Rocket size={16} />
                   {project.status === "已发布" ? "已发布" : "发布"}
                 </button>
+                <a href={project.publishedUrl || `${window.location.origin}${project.previewUrl || `/api/preview/${project.id}`}`} target="_blank" rel="noreferrer">
+                  <Globe2 size={16} />
+                  链接
+                </a>
               </div>
               {project.publishedUrl && <small className="published-url">{project.publishedUrl}</small>}
             </div>
@@ -2727,6 +4163,44 @@ function Toggle({ checked, onClick }: ToggleProps) {
     >
       <span />
     </span>
+  );
+}
+
+type ModelRouteSelectorProps = {
+  llmStatus?: LlmStatus;
+  selectedProvider: string;
+  onSelect: (provider: string) => void;
+};
+
+function ModelRouteSelector({ llmStatus, selectedProvider, onSelect }: ModelRouteSelectorProps) {
+  const providers = llmStatus?.providers ?? [];
+  const labelFor = (provider: LlmProviderStatus) => (provider.id === "relay" ? provider.model || "gpt-5.5" : provider.model);
+
+  return (
+    <div className="model-route-selector" aria-label="模型路由选择器">
+      <span title={llmStatus?.activeProvider ? `当前实际路由：${llmStatus.activeProvider.label} / ${llmStatus.activeProvider.model}` : "模型状态读取中"}>
+        <Brain size={15} />
+        模型
+      </span>
+      <button
+        className={selectedProvider === "auto" ? "active" : ""}
+        title="自动路由：优先通义千问，失败时切换到中转站"
+        onClick={() => onSelect("auto")}
+      >
+        Auto
+      </button>
+      {providers.map((provider) => (
+        <button
+          key={provider.id}
+          className={selectedProvider === provider.id ? "active" : ""}
+          disabled={!provider.configured}
+          title={`${provider.label} · ${provider.baseUrlHost || "未配置 endpoint"}`}
+          onClick={() => onSelect(provider.id)}
+        >
+          {labelFor(provider)}
+        </button>
+      ))}
+    </div>
   );
 }
 

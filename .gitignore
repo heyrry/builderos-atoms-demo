@@ -2,3 +2,6 @@ node_modules/
 dist/
 .DS_Store
 *.local
+.claude/
+.idea/
+要求.md

@@ -4,6 +4,8 @@
 
 线上 Demo：https://builder.poppcic.cn/
 
+<small>OmniAgent 参考平台：https://agent.poppcic.cn/。OmniAgent 是我自己开发的另一套 Agent / RAG 平台，和 BuilderOS 方向相近。本 Demo 借鉴了其中模型路由、知识库 grounding 和 Agent 编排的部分产品思路；它不是本次交付主体，只作为评委感兴趣时的补充参考。</small>
+
 评审演示账号：
 
 - Email: `reviewer@builderos.demo`
@@ -27,6 +29,7 @@
 - 生成项目目录：每次构建生成 React/Vite 项目文件树，包含 `app/frontend/src/App.tsx`、`src/data/generated.ts`、`src/styles.css`、`app/generated/preview.html` 等文件。
 - 源码查看：工作台内可点击文件树查看对应文件源码，同时保留 HTML / CSS / JS 快速查看、复制和导出单文件 HTML。
 - 源码包下载：`/api/projects/:id/download` 将生成项目打包为 zip，并附带 `builderos-manifest.json`。
+- 真实 GitHub 同步：本作品源码已同步到 public GitHub 仓库 `https://github.com/heyrry/builderos-atoms-demo`。
 - 版本管理：每个构建默认生成 `版本 1`，工作台支持手动保存新版本并持久化版本快照。
 - 真实发布预览：`/api/projects/:id/publish` 写入发布状态和发布检查，`/api/preview/:id` 提供可公开访问的生成应用页面。
 - BuilderOS Cloud 资源台：资源页展示 AI、Database、Users、Secrets、App Storage、GitHub、Stripe、Growth 等 Atoms Cloud 对标能力，并支持连接/检查状态持久化。
@@ -100,7 +103,7 @@ npm run build
 
 ## Atoms 对标说明
 
-BuilderOS 不是只复刻首页输入框，而是把 Atoms 的后续工作流也显性化：生成应用之后，评审可以继续查看 Cloud 资源、用户系统、数据库、应用存储、源码包、版本、发布链接、发布检查和增长/支付/GitHub 预留能力。当前第三方连接为 Demo 级状态机，真实 OAuth、支付和发布流水线作为下一阶段实现。
+BuilderOS 不是只复刻首页输入框，而是把 Atoms 的后续工作流也显性化：生成应用之后，评审可以继续查看 Cloud 资源、用户系统、数据库、应用存储、源码包、版本、发布链接、发布检查和增长/支付/GitHub 能力。当前作品源码已同步到 public GitHub；平台内 GitHub OAuth、支付和发布流水线作为下一阶段实现。
 
 相对 Atoms，BuilderOS 的扩展点不是“多做几个页面”，而是把生成过程、知识依据、Agent 调度和运行状态显式化：
 
@@ -155,7 +158,7 @@ BuilderOS 不是只复刻首页输入框，而是把 Atoms 的后续工作流也
 ## 后续迭代路线
 
 1. 沙箱执行：接入隔离容器，真实运行安装、构建、预览和错误修复循环。
-2. GitHub 同步：支持创建仓库、提交生成文件、打开 PR 和版本 diff。
+2. GitHub OAuth / PR 流水线：当前作品源码已完成 public GitHub 同步；后续支持平台内创建仓库、提交生成文件、打开 PR 和版本 diff。
 3. 真实发布：接入 Vercel 或 Cloudflare Pages API，把预览升级为公网部署。
 4. RAG 增强：当前为 keyword RAG + 文件解析；后续升级为 embeddings + 向量数据库 + rerank，并增加 PDF/DOCX 解析、页码引用和段落级来源追踪。
 5. 计费与积分：当前积分不限制使用；后续补 usage ledger、充值流水、订阅套餐、余额扣减、退款审计和模型成本归因。

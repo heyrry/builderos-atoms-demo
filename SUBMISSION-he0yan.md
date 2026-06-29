@@ -6,6 +6,8 @@
 
 产品定位：Atoms 偏“输入想法后自动生成产品”，BuilderOS 在这个基础上额外强调“过程可见、Agent 可配置、执行可审查”。因此本次 Demo 除了实现 Atoms-like 的首页生成体验，还吸收了我另一套 OmniAgent 平台中的 Agent 编排思路，把隐式多智能体工作流做成显式自由编排能力：评委可以看到每个 Agent 的角色、系统提示词、模型路由、工具、输入输出、Guardrail 和执行 Trace。
 
+<small>补充说明：OmniAgent 是我自己开发的另一套 Agent / RAG 平台，方向和 BuilderOS 有相似之处。本 Demo 只借鉴其中“模型路由、知识库 grounding、Agent 编排”的产品思路；若评委有兴趣，可访问 OmniAgent：`https://agent.poppcic.cn/`。</small>
+
 相对 Atoms，BuilderOS 重点扩展了三类能力：第一是显式 Agent 编排，把自动化 Agent 链路变成可配置、可审查的工作流；第二是知识 grounding，把知识库、文件解析和 RAG 证据作为生成结果的依据；第三是运行审计与可观测性，把 API 健康、服务状态、持久化路径、运行记录和 Agent Orchestrator 状态通过实时数据页暴露出来。换句话说，Atoms 强在自动生成和自动配置，BuilderOS 希望把生成过程、知识依据、Agent 调度和运行状态做成可复盘的 Builder 控制台。
 
 标题：Atoms Demo - he0yan
@@ -139,6 +141,7 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 - 生成 React/Vite 项目文件夹
 - 文件树浏览和文件级源码复制
 - 源码复制、HTML 导出与 zip 源码包下载
+- 真实 GitHub 同步：本作品源码已同步到 public GitHub 仓库 `builderos-atoms-demo`
 - 版本快照
 - 真实发布预览链接
 - 发布检查
@@ -164,7 +167,6 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 时间限制下明确未完成，但已设计后续路径：
 
 - 真实代码沙箱执行和依赖安装日志
-- 真实 GitHub 同步
 - 真实云发布
 - 第三方 OAuth 和团队权限
 - 多知识库管理：先新建知识库，再在每个知识库下上传资料，并在构建 / Agent 编排时选择召回范围
@@ -182,13 +184,14 @@ BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent
 - 运行审计：实时数据页不是装饰性 dashboard，而是把服务健康、运行记录、RAG/Build/Agent Orchestrator 状态和持久化路径显式暴露给评委。
 - 延展能力：`编排` 页面提供预定义 Agent 链真实执行，配置写入服务端 state，运行结果来自 LLM 调用和知识库简历，实时数据页显示 Agent Orchestrator 健康状态。
 - 生成文件：生产环境落盘到 `/opt/builderos/data/generated-projects/project-<id>/`，并可通过 zip 下载。
+- GitHub 同步：本作品源码已同步到 public GitHub 仓库 `https://github.com/heyrry/builderos-atoms-demo`；平台内 GitHub OAuth、自动创建仓库和 PR 流水线作为后续增强。
 
 ## 9. 后续扩展优先级
 
 1. 沙箱执行优先：接入隔离容器，真实运行 `npm install`、`npm run build` 和自动修错循环，让平台从“生成代码”升级为“生成并验证代码”。
 2. 显式自由编排增强：把当前串行 Agent 链升级为可拖拽 DAG，补充分支条件、失败重试、人工确认、节点级超时、节点级模型成本和审计日志。这是 BuilderOS 区别于 Atoms 的重点方向，也承接 OmniAgent 的自由编排优势。
 3. RAG 信息架构升级：当前版本是单工作区知识池，已经支持 keyword RAG + 文件解析；下一步先升级为“多个知识库 / 每库多资料 / 构建或编排时选择召回范围”，再升级 embeddings + 向量数据库 + rerank，并补充 PDF/DOCX 解析、页码引用和段落级来源追踪。
-4. GitHub 与发布流水线：接入 GitHub OAuth，支持一键创建仓库、提交生成文件、打开 PR；再接入 Vercel 或 Cloudflare Pages API，把当前 `/api/preview/:id` 升级为真实部署。
+4. GitHub OAuth 与发布流水线：当前作品源码已完成 public GitHub 同步；下一步是在平台内接入 GitHub OAuth，支持一键创建仓库、提交生成文件、打开 PR 和版本 diff，再接入 Vercel 或 Cloudflare Pages API，把当前 `/api/preview/:id` 升级为真实部署。
 5. 计费与积分系统：当前 Demo 积分不做限制，只用于展示。后续会设计完整账务闭环：模型调用按 provider/model 记录 token、延迟和成本；构建、Agent 编排、文件解析、发布等动作生成 usage ledger；用户可通过 Stripe/支付宝/微信或企业转账充值；充值写入 balance ledger，消费按额度扣减；订阅套餐提供每月额度、团队席位、私有项目、并发构建和高级模型权限；异常退款和人工加款保留审计记录。
 6. 多模型调度：按任务类型选择 Qwen、第三方中转站或其他模型，增加成本、延迟、成功率和质量评分；长期目标是让 Agent 编排可以按节点选择“便宜模型 / 强模型 / 快模型”。
 7. 团队协作与真实连接器：增加 workspace 成员、角色权限、项目评论、版本 diff 和审查记录；把 GitHub、Stripe、Growth、Storage 等资源台从 Demo 状态机升级为 OAuth/Token 驱动的真实连接器。

@@ -304,6 +304,8 @@ type AgentOrchestration = {
   domain: string;
   status: "draft" | "ready";
   owner: string;
+  sourceTemplateId?: string;
+  sourceTemplateName?: string;
   updatedAt: string;
   steps: OrchestrationStep[];
   lastRun?: OrchestrationRun | null;
@@ -3088,16 +3090,28 @@ function OrchestrationView({
   const [running, setRunning] = useState(false);
   const [executionIndex, setExecutionIndex] = useState(-1);
   const [runError, setRunError] = useState("");
+  const [activeFlowTab, setActiveFlowTab] = useState<"templates" | "configs">("templates");
   const totalTransitions = Math.max(0, active.steps.length - 1);
   const lastRun = active.lastRun;
   const activeExecutionStep = running ? active.steps[Math.max(0, executionIndex)] : null;
   const resultTrace = lastRun?.trace ?? [];
   const finalReport = lastRun?.finalReport;
+  const isTemplateFlow = (item: AgentOrchestration) => item.owner === "BuilderOS" || item.updatedAt === "内置";
+  const templateFlows = orchestrations.filter(isTemplateFlow);
+  const customFlows = orchestrations.filter((item) => !isTemplateFlow(item));
+  const visibleFlows = activeFlowTab === "templates" ? templateFlows : customFlows;
+  const activeIsTemplate = isTemplateFlow(active);
+  const activeSourceTemplate = resolveSourceTemplate(active);
+  const activeSourceName = activeSourceTemplate?.name || active.sourceTemplateName || (activeIsTemplate ? active.name : "历史自定义配置");
   const configuredProviders = llmStatus?.providers?.filter((provider) => provider.configured) ?? [];
   const selectedRouteLabel =
     selectedLlmProvider === "auto"
       ? `Auto: ${llmStatus?.activeProvider?.model || "qwen-plus"}`
       : configuredProviders.find((provider) => provider.id === selectedLlmProvider)?.model || selectedLlmProvider;
+
+  useEffect(() => {
+    setActiveFlowTab(activeIsTemplate ? "templates" : "configs");
+  }, [active.id, activeIsTemplate]);
 
   function stepModelLabel(step: OrchestrationStep) {
     const route = step.llmProvider || selectedLlmProvider;
@@ -3108,6 +3122,28 @@ function OrchestrationView({
       return `Auto: ${llmStatus?.activeProvider?.model || "qwen-plus"}`;
     }
     return configuredProviders.find((provider) => provider.id === route)?.model || route;
+  }
+
+  function resolveSourceTemplate(item: AgentOrchestration) {
+    if (isTemplateFlow(item)) {
+      return item;
+    }
+    if (item.sourceTemplateId) {
+      const sourceById = templateFlows.find((template) => template.id === item.sourceTemplateId);
+      if (sourceById) {
+        return sourceById;
+      }
+    }
+    if (item.sourceTemplateName) {
+      const sourceByName = templateFlows.find((template) => template.name === item.sourceTemplateName);
+      if (sourceByName) {
+        return sourceByName;
+      }
+    }
+    return (
+      templateFlows.find((template) => template.domain === item.domain) ||
+      templateFlows.find((template) => template.steps[0]?.agent === item.steps[0]?.agent)
+    );
   }
 
   function saveActive(patch: Partial<AgentOrchestration>) {
@@ -3121,6 +3157,14 @@ function OrchestrationView({
         : item,
     );
     onSaveOrchestrations(nextItems, active.id);
+  }
+
+  function selectFlowTab(tab: "templates" | "configs") {
+    setActiveFlowTab(tab);
+    const nextFlow = tab === "templates" ? templateFlows[0] : customFlows[0];
+    if (nextFlow) {
+      onSelect(nextFlow.id);
+    }
   }
 
   function updateStep(stepId: string, patch: Partial<OrchestrationStep>) {
@@ -3163,18 +3207,42 @@ function OrchestrationView({
 
   function createOrchestration() {
     const source = active || defaultOrchestrations[0];
+    const sourceTemplate = resolveSourceTemplate(source);
+    const sourceTemplateId = sourceTemplate?.id || source.sourceTemplateId || source.id;
+    const sourceTemplateName = sourceTemplate?.name || source.sourceTemplateName || source.name;
     const nextItem: AgentOrchestration = {
       ...source,
       id: createLocalId("flow"),
-      name: "自定义 Agent 编排",
-      description: "从现有链路复制后自由调整 Agent、动作、工具和交付物。",
+      name: `自定义 Agent 编排 ${customFlows.length + 1}`,
+      description: `基于「${sourceTemplateName}」复制后自由调整 Agent、模型、系统提示词、动作、工具和交付物。`,
       status: "draft",
       owner: "Reviewer Workspace",
+      sourceTemplateId,
+      sourceTemplateName,
       updatedAt: "刚刚",
       steps: source.steps.slice(0, 4).map((step) => ({ ...step, id: createLocalId("step") })),
       lastRun: null,
     };
+    setActiveFlowTab("configs");
     onSaveOrchestrations([nextItem, ...orchestrations], nextItem.id);
+  }
+
+  function deleteOrchestration(flowId: string) {
+    const target = orchestrations.find((item) => item.id === flowId);
+    if (!target || isTemplateFlow(target)) {
+      return;
+    }
+    const nextItems = orchestrations.filter((item) => item.id !== flowId);
+    const nextCustomFlows = nextItems.filter((item) => !isTemplateFlow(item));
+    const nextTemplateFlows = nextItems.filter(isTemplateFlow);
+    const nextSelectedId =
+      active.id === flowId
+        ? nextCustomFlows[0]?.id || nextTemplateFlows[0]?.id || defaultOrchestrations[0].id
+        : active.id;
+    if (!nextCustomFlows.length) {
+      setActiveFlowTab("templates");
+    }
+    onSaveOrchestrations(nextItems.length ? nextItems : defaultOrchestrations, nextSelectedId);
   }
 
   function runOrchestration() {
@@ -3215,12 +3283,21 @@ function OrchestrationView({
         <div>
           <span className="eyebrow">Agent Orchestration</span>
           <h1>Agent 自由编排</h1>
+          <p className="active-flow-context">
+            当前配置：{active.name} · {activeIsTemplate ? "内置模板" : `基于「${activeSourceName}」创建`}
+          </p>
         </div>
         <div className="orchestration-actions">
           <button onClick={createOrchestration}>
             <Sparkles size={16} />
             新建编排
           </button>
+          {!activeIsTemplate && (
+            <button className="danger-action" onClick={() => deleteOrchestration(active.id)} disabled={running}>
+              <Trash2 size={16} />
+              删除配置
+            </button>
+          )}
           <button onClick={() => onSaveOrchestrations(orchestrations, active.id)}>
             <CheckCircle2 size={16} />
             保存配置
@@ -3388,36 +3465,54 @@ function OrchestrationView({
       <div className="orchestration-layout">
         <aside className="orchestration-library">
           <div className="library-tabs">
-            <button className="active">模板库</button>
-            <button>
-              我的配置 <strong>{orchestrations.length}</strong>
+            <button className={activeFlowTab === "templates" ? "active" : ""} onClick={() => selectFlowTab("templates")}>
+              模板库 <strong>{templateFlows.length}</strong>
+            </button>
+            <button className={activeFlowTab === "configs" ? "active" : ""} onClick={() => selectFlowTab("configs")}>
+              我的配置 <strong>{customFlows.length}</strong>
             </button>
           </div>
           <button className="new-flow-button" onClick={createOrchestration}>
             <Sparkles size={17} />
-            新建编排
+            从当前配置新建
           </button>
           <div className="flow-list">
-            {orchestrations.map((item) => (
-              <button
+            {visibleFlows.map((item) => (
+              <article
                 key={item.id}
                 className={item.id === active.id ? "flow-card active" : "flow-card"}
-                onClick={() => onSelect(item.id)}
               >
-                <span>
-                  <strong>{item.name}</strong>
-                  <small>{item.domain}</small>
-                </span>
-                <em>{item.status === "ready" ? "配置完整" : "草稿"}</em>
-              </button>
+                <button className="flow-card-main" onClick={() => onSelect(item.id)}>
+                  <span>
+                    <strong>{item.name}</strong>
+                    <small>
+                      {isTemplateFlow(item)
+                        ? `${item.domain} · 内置模板`
+                        : `${item.domain} · 基于 ${resolveSourceTemplate(item)?.name || item.sourceTemplateName || "历史自定义配置"}`}
+                    </small>
+                  </span>
+                  <em>{item.status === "ready" ? "配置完整" : "草稿"}</em>
+                </button>
+                {!isTemplateFlow(item) && (
+                  <button className="flow-delete-button" aria-label={`删除 ${item.name}`} onClick={() => deleteOrchestration(item.id)}>
+                    <Trash2 size={15} />
+                  </button>
+                )}
+              </article>
             ))}
+            {!visibleFlows.length && (
+              <div className="flow-empty-state">
+                <strong>{activeFlowTab === "configs" ? "还没有自定义配置" : "暂无模板"}</strong>
+                <span>{activeFlowTab === "configs" ? "从模板库选择一个模板后点击“从当前配置新建”。" : "稍后可在这里扩展更多场景模板。"}</span>
+              </div>
+            )}
           </div>
         </aside>
 
         <div className="orchestration-main">
           <div className="flow-header-panel">
             <div>
-              <span className="eyebrow">执行链路</span>
+              <span className="eyebrow">执行链路 · {activeIsTemplate ? "模板预览" : `基于 ${activeSourceName}`}</span>
               <input
                 value={active.name}
                 aria-label="编排名称"

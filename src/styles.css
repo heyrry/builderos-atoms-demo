@@ -3207,6 +3207,18 @@ button {
   color: #2f2f2d;
 }
 
+.orchestration-actions .danger-action {
+  background: #fff0f0;
+  color: #b73b3b;
+}
+
+.active-flow-context {
+  margin: 8px 0 0;
+  color: var(--text-muted);
+  font-size: 14px;
+  font-weight: 650;
+}
+
 .orchestration-layout {
   display: grid;
   grid-template-columns: 300px minmax(0, 1fr);
@@ -3276,17 +3288,16 @@ button {
 
 .flow-card {
   display: grid;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  gap: 10px;
   min-height: 78px;
   justify-content: stretch;
   border: 1px solid #dededc;
   border-radius: 8px;
   background: #fff;
   color: #252523;
-  padding: 12px;
   text-align: left;
+  overflow: hidden;
 }
 
 .flow-card.active {
@@ -3295,16 +3306,39 @@ button {
   box-shadow: 0 0 0 1px rgba(65, 104, 245, 0.2);
 }
 
-.flow-card span {
+.flow-card-main {
   display: grid;
-  gap: 5px;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  width: 100%;
+  min-height: 78px;
+  justify-content: stretch;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  padding: 12px;
+  text-align: left;
+  box-shadow: none;
 }
 
-.flow-card small {
+.flow-card-main span {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+}
+
+.flow-card-main strong,
+.flow-card-main small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.flow-card-main small {
   color: var(--text-muted);
 }
 
-.flow-card em {
+.flow-card-main em {
   border: 1px solid #bce7b3;
   border-radius: 7px;
   background: #f0fbec;
@@ -3313,6 +3347,34 @@ button {
   font-style: normal;
   font-size: 12px;
   font-weight: 800;
+}
+
+.flow-delete-button {
+  width: 36px;
+  height: 36px;
+  justify-content: center;
+  margin-right: 10px;
+  border: 0;
+  border-radius: 999px;
+  background: #f6f0ef;
+  color: #9b3a32;
+  padding: 0;
+  box-shadow: none;
+}
+
+.flow-empty-state {
+  display: grid;
+  gap: 6px;
+  border: 1px dashed #d6d5d2;
+  border-radius: 8px;
+  background: #fafafa;
+  color: #777670;
+  padding: 14px;
+  line-height: 1.5;
+}
+
+.flow-empty-state strong {
+  color: #2d2d2a;
 }
 
 .orchestration-main {

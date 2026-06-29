@@ -1,0 +1,661 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>BuilderOS — Atoms Demo · he0yan</title>
+  <style>
+    :root {
+      --bg: #0f1117;
+      --bg2: #161b27;
+      --bg3: #1e2536;
+      --border: #2a3347;
+      --accent: #4f8ef7;
+      --accent2: #7c6af7;
+      --green: #22c55e;
+      --yellow: #f59e0b;
+      --text: #e2e8f0;
+      --text2: #94a3b8;
+      --text3: #64748b;
+      --code-bg: #1a2235;
+      --radius: 10px;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Hiragino Sans GB", sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.7;
+      font-size: 15px;
+    }
+
+    /* Layout */
+    .layout { display: flex; min-height: 100vh; }
+    .sidebar {
+      width: 240px;
+      flex-shrink: 0;
+      position: sticky;
+      top: 0;
+      height: 100vh;
+      overflow-y: auto;
+      background: var(--bg2);
+      border-right: 1px solid var(--border);
+      padding: 28px 0 40px;
+    }
+    .sidebar-logo {
+      padding: 0 20px 24px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 16px;
+    }
+    .sidebar-logo .brand {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--text);
+      letter-spacing: -0.3px;
+    }
+    .sidebar-logo .sub {
+      font-size: 12px;
+      color: var(--text3);
+      margin-top: 2px;
+    }
+    .nav-section {
+      padding: 4px 12px;
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text3);
+      margin-top: 12px;
+      margin-bottom: 4px;
+    }
+    .nav-item {
+      display: block;
+      padding: 7px 20px;
+      color: var(--text2);
+      text-decoration: none;
+      font-size: 13.5px;
+      border-radius: 6px;
+      margin: 1px 8px;
+      transition: all 0.15s;
+    }
+    .nav-item:hover, .nav-item.active {
+      background: var(--bg3);
+      color: var(--text);
+    }
+    .nav-item.active { color: var(--accent); }
+
+    .main { flex: 1; max-width: 860px; padding: 48px 52px 80px; }
+
+    /* Hero */
+    .hero {
+      margin-bottom: 48px;
+      padding-bottom: 32px;
+      border-bottom: 1px solid var(--border);
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      background: rgba(79,142,247,0.1);
+      border: 1px solid rgba(79,142,247,0.25);
+      color: var(--accent);
+      font-size: 12px;
+      font-weight: 600;
+      padding: 4px 10px;
+      border-radius: 20px;
+      margin-bottom: 16px;
+      letter-spacing: 0.3px;
+    }
+    .hero-badge .dot {
+      width: 6px; height: 6px;
+      background: var(--accent);
+      border-radius: 50%;
+      animation: pulse 2s infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.4; }
+    }
+    .hero h1 {
+      font-size: 32px;
+      font-weight: 800;
+      letter-spacing: -0.8px;
+      line-height: 1.2;
+      background: linear-gradient(135deg, #e2e8f0 0%, #94a3b8 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 12px;
+    }
+    .hero p { color: var(--text2); font-size: 15px; max-width: 640px; line-height: 1.8; }
+
+    /* Quick cards */
+    .quick-cards {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 48px;
+    }
+    .card {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 18px 20px;
+    }
+    .card-label {
+      font-size: 11px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      color: var(--text3);
+      margin-bottom: 8px;
+    }
+    .card-link {
+      color: var(--accent);
+      text-decoration: none;
+      font-size: 14px;
+      font-weight: 600;
+      word-break: break-all;
+    }
+    .card-link:hover { text-decoration: underline; }
+    .card-meta { color: var(--text2); font-size: 13px; margin-top: 6px; line-height: 1.6; }
+    .cred-row {
+      display: flex;
+      gap: 10px;
+      margin-top: 8px;
+      flex-wrap: wrap;
+    }
+    .cred {
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      border-radius: 6px;
+      padding: 3px 10px;
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      font-size: 12px;
+      color: var(--text);
+    }
+    .card.full { grid-column: 1 / -1; }
+    .card.github-card {
+      background: linear-gradient(135deg, rgba(79,142,247,0.06) 0%, rgba(124,106,247,0.06) 100%);
+      border-color: rgba(79,142,247,0.2);
+    }
+
+    /* Status pills */
+    .status-pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 12px;
+    }
+    .pill-green { background: rgba(34,197,94,0.12); color: #22c55e; border: 1px solid rgba(34,197,94,0.2); }
+    .pill-blue { background: rgba(79,142,247,0.12); color: var(--accent); border: 1px solid rgba(79,142,247,0.2); }
+
+    /* Section headings */
+    .section { margin-bottom: 52px; }
+    .section h2 {
+      font-size: 20px;
+      font-weight: 700;
+      color: var(--text);
+      margin-bottom: 20px;
+      padding-bottom: 12px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      letter-spacing: -0.3px;
+    }
+    .section h2 .sec-num {
+      font-size: 12px;
+      font-weight: 600;
+      background: var(--bg3);
+      border: 1px solid var(--border);
+      color: var(--text3);
+      padding: 2px 7px;
+      border-radius: 5px;
+    }
+    .section h3 {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--text);
+      margin: 24px 0 12px;
+    }
+    .section p { color: var(--text2); margin-bottom: 14px; line-height: 1.8; }
+    .section ul, .section ol {
+      color: var(--text2);
+      padding-left: 22px;
+      margin-bottom: 14px;
+    }
+    .section li { margin-bottom: 6px; line-height: 1.7; }
+    .section li strong { color: var(--text); }
+
+    /* Inline code */
+    code {
+      font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+      background: var(--code-bg);
+      border: 1px solid var(--border);
+      color: #a5d6ff;
+      font-size: 12.5px;
+      padding: 1px 5px;
+      border-radius: 4px;
+    }
+
+    /* Review steps */
+    .steps { display: flex; flex-direction: column; gap: 10px; margin-bottom: 16px; }
+    .step {
+      display: flex;
+      gap: 14px;
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 14px 16px;
+      align-items: flex-start;
+    }
+    .step-num {
+      width: 26px;
+      height: 26px;
+      border-radius: 50%;
+      background: linear-gradient(135deg, var(--accent) 0%, var(--accent2) 100%);
+      color: #fff;
+      font-size: 12px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .step-text { color: var(--text2); font-size: 14px; line-height: 1.7; }
+    .step-text strong { color: var(--text); }
+
+    /* Feature grid */
+    .feature-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+    .feat {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 14px;
+      font-size: 13.5px;
+      color: var(--text2);
+      display: flex;
+      align-items: flex-start;
+      gap: 8px;
+    }
+    .feat-icon { color: var(--green); flex-shrink: 0; margin-top: 2px; }
+    .feat-todo .feat-icon { color: var(--text3); }
+    .feat-todo { opacity: 0.65; }
+
+    /* Table */
+    .table-wrap { overflow-x: auto; margin-bottom: 14px; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13.5px;
+    }
+    th {
+      background: var(--bg3);
+      color: var(--text2);
+      font-weight: 600;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
+      padding: 10px 14px;
+      text-align: left;
+      border-bottom: 1px solid var(--border);
+    }
+    td {
+      padding: 11px 14px;
+      border-bottom: 1px solid var(--border);
+      color: var(--text2);
+      vertical-align: top;
+      line-height: 1.6;
+    }
+    tr:last-child td { border-bottom: none; }
+    tbody tr:hover td { background: rgba(255,255,255,0.02); }
+    td strong { color: var(--text); }
+    .tool-price {
+      font-family: "SF Mono", "Fira Code", monospace;
+      font-size: 12.5px;
+      color: var(--green);
+      white-space: nowrap;
+    }
+
+    /* Highlight box */
+    .highlight-box {
+      background: linear-gradient(135deg, rgba(79,142,247,0.07) 0%, rgba(124,106,247,0.07) 100%);
+      border: 1px solid rgba(79,142,247,0.2);
+      border-radius: var(--radius);
+      padding: 16px 20px;
+      margin-bottom: 16px;
+      color: var(--text2);
+      font-size: 14px;
+      line-height: 1.7;
+    }
+    .highlight-box strong { color: var(--text); }
+
+    .note-box {
+      background: rgba(245,158,11,0.07);
+      border: 1px solid rgba(245,158,11,0.2);
+      border-radius: 8px;
+      padding: 12px 16px;
+      font-size: 13.5px;
+      color: #fbbf24;
+      margin-bottom: 14px;
+      line-height: 1.6;
+    }
+
+    /* Priority list */
+    .priority-list { display: flex; flex-direction: column; gap: 8px; }
+    .priority-item {
+      background: var(--bg2);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 12px 16px;
+      display: flex;
+      gap: 12px;
+      align-items: flex-start;
+    }
+    .priority-num {
+      font-size: 12px;
+      font-weight: 700;
+      color: var(--accent);
+      background: rgba(79,142,247,0.1);
+      border: 1px solid rgba(79,142,247,0.2);
+      border-radius: 5px;
+      padding: 2px 8px;
+      flex-shrink: 0;
+      margin-top: 1px;
+    }
+    .priority-text { color: var(--text2); font-size: 13.5px; line-height: 1.7; }
+    .priority-text strong { color: var(--text); }
+
+    /* Footer */
+    .footer {
+      margin-top: 60px;
+      padding-top: 24px;
+      border-top: 1px solid var(--border);
+      color: var(--text3);
+      font-size: 12.5px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: gap;
+    }
+
+    /* Responsive */
+    @media (max-width: 900px) {
+      .sidebar { display: none; }
+      .main { padding: 28px 20px 60px; }
+      .quick-cards { grid-template-columns: 1fr; }
+      .feature-grid { grid-template-columns: 1fr; }
+    }
+
+    /* Scrollbar */
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+  </style>
+</head>
+<body>
+<div class="layout">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-logo">
+      <div class="brand">BuilderOS</div>
+      <div class="sub">Atoms Demo · he0yan</div>
+    </div>
+    <div class="nav-section">提交信息</div>
+    <a href="#demo" class="nav-item">Demo 链接</a>
+    <a href="#github" class="nav-item">GitHub 源码</a>
+    <div class="nav-section">文档</div>
+    <a href="#overview" class="nav-item">项目概述</a>
+    <a href="#review" class="nav-item">评审路径</a>
+    <a href="#highlight" class="nav-item">重点亮点</a>
+    <a href="#impl" class="nav-item">实现思路</a>
+    <a href="#done" class="nav-item">完成程度</a>
+    <a href="#verify" class="nav-item">线上验证</a>
+    <a href="#roadmap" class="nav-item">后续扩展</a>
+    <a href="#tools" class="nav-item">AI 工具账单</a>
+  </nav>
+
+  <!-- Main content -->
+  <main class="main">
+
+    <!-- Hero -->
+    <div class="hero">
+      <div class="hero-badge"><span class="dot"></span> 在线可访问</div>
+      <h1>Atoms Demo — he0yan</h1>
+      <p>一个可运行的 AI Agent 应用生成平台原型。用户输入需求，多智能体协作生成可交互网页应用，并产出项目文件夹、源码包、版本记录与发布预览。</p>
+    </div>
+
+    <!-- Quick cards -->
+    <div class="quick-cards">
+      <div class="card" id="demo">
+        <div class="card-label">Demo 链接</div>
+        <a class="card-link" href="https://builder.poppcic.cn/" target="_blank">https://builder.poppcic.cn/</a>
+        <div class="card-meta">生产部署，MySQL 持久化，真实 LLM 网关</div>
+        <div class="cred-row">
+          <span class="cred">reviewer@builderos.demo</span>
+          <span class="cred">BuilderOS2026</span>
+        </div>
+      </div>
+      <div class="card github-card" id="github">
+        <div class="card-label">GitHub 源码</div>
+        <a class="card-link" href="https://github.com/heyrry/builderos-atoms-demo" target="_blank">heyrry / builderos-atoms-demo</a>
+        <div class="card-meta">Public 仓库，含完整源码与部署说明</div>
+      </div>
+      <div class="card full" style="background: linear-gradient(135deg, rgba(34,197,94,0.06) 0%, rgba(79,142,247,0.06) 100%); border-color: rgba(34,197,94,0.15);">
+        <div style="display:flex; gap:10px; flex-wrap:wrap; align-items:center;">
+          <span class="status-pill pill-green">● API Healthy</span>
+          <span class="status-pill pill-blue">LLM: real mode</span>
+          <span class="status-pill pill-blue">qwen-plus</span>
+          <span class="status-pill pill-blue">gpt-5.5 / token-qiv.cn</span>
+          <span class="status-pill pill-green">MySQL 持久化</span>
+        </div>
+        <div style="margin-top:10px; font-size:13px; color:var(--text3);">
+          验证接口：
+          <a href="https://builder.poppcic.cn/api/status" target="_blank" style="color:var(--accent); text-decoration:none; margin-right:14px;">/api/status</a>
+          <a href="https://builder.poppcic.cn/api/llm/status" target="_blank" style="color:var(--accent); text-decoration:none;">/api/llm/status</a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Overview -->
+    <div class="section" id="overview">
+      <h2><span class="sec-num">01</span> 项目概述</h2>
+      <p>本项目实现了一个可运行的 Atoms-like Demo，命名为 <strong>BuilderOS</strong>：用户通过自然语言描述需求，平台使用 LLM 网关和多智能体流程生成一个可交互网页应用，同时产出项目文件夹、源码包、版本记录和发布预览。作品目标不是做一个静态仿站，而是交付一个评委可以真实注册、登录、构建、查看源码、下载产物和验证服务端数据的 AI Native 应用生成平台原型。</p>
+      <div class="highlight-box">
+        <strong>产品定位：</strong>Atoms 偏"输入想法后自动生成产品"，BuilderOS 在这个基础上额外强调<strong>过程可见、Agent 可配置、执行可审查</strong>。本 Demo 除了实现 Atoms-like 的首页生成体验，还吸收了另一套 OmniAgent 平台中的 Agent 编排思路，把隐式多智能体工作流做成显式自由编排能力。
+      </div>
+      <div class="note-box">
+        补充说明：OmniAgent 是本人自研的另一套 Agent / RAG 平台，方向与 BuilderOS 相似。本 Demo 借鉴其"模型路由、知识库 grounding、Agent 编排"的产品思路。感兴趣可访问：<a href="https://agent.poppcic.cn/" target="_blank" style="color:#fbbf24;">agent.poppcic.cn</a>
+      </div>
+      <p>相对 Atoms，BuilderOS 重点扩展了三类能力：</p>
+      <ul>
+        <li><strong>显式 Agent 编排</strong>：把自动化 Agent 链路变成可配置、可审查的工作流</li>
+        <li><strong>知识 grounding</strong>：把知识库、文件解析和 RAG 证据作为生成结果的依据</li>
+        <li><strong>运行审计与可观测性</strong>：把 API 健康、服务状态、持久化路径、运行记录和 Agent Orchestrator 状态通过实时数据页暴露出来</li>
+      </ul>
+    </div>
+
+    <!-- Review path -->
+    <div class="section" id="review">
+      <h2><span class="sec-num">02</span> 建议评审路径</h2>
+      <div class="steps">
+        <div class="step"><div class="step-num">1</div><div class="step-text">打开 <code>https://builder.poppcic.cn/</code>，使用演示账号或自行注册工作区。</div></div>
+        <div class="step"><div class="step-num">2</div><div class="step-text">在首页输入需求，例如<strong>「生成一个带登录、订阅和仪表盘的 AI 客服 SaaS」</strong>；顶部模型路由可切换 <code>Auto / qwen-plus / gpt-5.5</code>，其中 <code>gpt-5.5</code> 走 <code>token-qiv.cn</code> OpenAI 兼容中转站。</div></div>
+        <div class="step"><div class="step-num">3</div><div class="step-text">等待 Agent Run 完成，查看生成应用预览、Agent 决策、RAG 证据和模型来源。</div></div>
+        <div class="step"><div class="step-num">4</div><div class="step-text">打开文件视图，查看 <code>app/frontend/src/App.tsx</code>、<code>src/styles.css</code>、<code>src/data/generated.ts</code> 等生成文件。</div></div>
+        <div class="step"><div class="step-num">5</div><div class="step-text">点击源码包下载，验证平台会生成完整项目文件夹和 manifest。</div></div>
+        <div class="step"><div class="step-num">6</div><div class="step-text">点击发布，打开 <code>/api/preview/:id</code> 的公开预览链接。</div></div>
+        <div class="step"><div class="step-num">7</div><div class="step-text">进入<strong>资源、知识库、实时数据、差异</strong>页面，查看 BuilderOS 相对 Atoms 的扩展能力；知识库页面支持上传 <code>.txt / .md / .csv / .json</code>，服务端会解析文本并生成可召回知识条目。</div></div>
+        <div class="step"><div class="step-num">8</div><div class="step-text">进入<strong>「编排」</strong>页面，体验 OmniAgent 风格的 Agent 链路：查看任务说明、垂直任务流程、任务结果三栏工作台；点击「试运行链路」会由后端按预定义 Agent 链真实调用 LLM，并基于服务端知识库中的简历数据生成候选人推荐结果。</div></div>
+      </div>
+    </div>
+
+    <!-- Highlight -->
+    <div class="section" id="highlight">
+      <h2><span class="sec-num">03</span> 重点亮点：流程编排与 Agent 调度</h2>
+      <div class="highlight-box">
+        在线演示入口：<a href="https://builder.poppcic.cn/?section=orchestration" target="_blank" style="color:var(--accent);">builder.poppcic.cn/?section=orchestration</a><br/>
+        登录演示账号后进入「编排」页，点击右上角「试运行链路」或左下角「开始执行」，即可触发后端 <code>/api/orchestrations/:id/run</code> 串行调度。
+      </div>
+      <h3>5.1 流程编排</h3>
+      <p>BuilderOS 在 Atoms-like 应用生成主流程之外，增加了一个 OmniAgent 风格的显式 Agent 编排能力。每个步骤包含：Agent 名称、角色职责、系统提示词、模型路由、执行动作、输出产物、工具绑定、守护规则。</p>
+      <h3>5.2 Agent 调度</h3>
+      <p>采用串行调度模型：总控 → 需求分析 → 简历检索 → 匹配评分 → 面试题 → 报告汇总。服务端每个 Agent 节点按"节点模型配置优先，其次继承顶部路由"规则调用 LLM。本轮线上验证中，链路使用 <code>qwen-plus</code> 完成 6 个节点调用，命中 9 条知识库证据，输出来自服务端知识库的候选人排序。</p>
+      <h3>5.3 流程可视化</h3>
+      <p>编排页使用三栏执行工作台：</p>
+      <ul>
+        <li><strong>左侧「任务说明」</strong>：任务背景、适用场景、编排要求和当前链路</li>
+        <li><strong>中间「任务流程」</strong>：垂直节点展示 Agent 执行链路，区分待执行/执行中/已完成</li>
+        <li><strong>右侧「任务结果」</strong>：真实 Agent 输出摘要、LLM provider、知识库证据数量、候选人排序和最终交付</li>
+      </ul>
+      <h3>5.4 校验与可审查性</h3>
+      <ul>
+        <li>配置写入服务端 <code>state.json</code>，刷新页面后仍可恢复</li>
+        <li><code>/api/status</code> 中新增 Agent Orchestrator 服务项</li>
+        <li><code>/api/cloud-resources</code> 中新增「Agent 自由编排」资源卡，展示 flows / steps 数量</li>
+        <li>试运行生成 Execution Trace，记录每个 Agent 的动作、耗时、LLM provider、证据标题和输出</li>
+        <li>每个步骤含 guardrail：输出必须附带依据、分数必须可解释、结论和证据一一对应</li>
+      </ul>
+    </div>
+
+    <!-- Impl -->
+    <div class="section" id="impl">
+      <h2><span class="sec-num">04</span> 实现思路与关键取舍</h2>
+      <ul>
+        <li>React + TypeScript + Vite 快速构建可体验产品原型</li>
+        <li>首次进入提供工作区初始化和注册，用户信息、密码哈希和会话写入 MySQL</li>
+        <li>登录不会自动创建用户；侧边栏提供退出登录入口，退出时清除本地 token 并调用服务端 logout 让 session 失效</li>
+        <li>服务端支持 OpenAI 兼容 <code>/chat/completions</code>，密钥通过环境变量配置并在状态接口中脱敏展示</li>
+        <li>登录后顶部提供模型路由选择器：<code>Auto / qwen-plus / gpt-5.5</code>；选择 <code>gpt-5.5</code> 时直接走 <code>token-qiv.cn</code> 中转站；当模型不可用时自动降级到本地模板生成器</li>
+        <li>积分当前只作为额度展示，不限制构建次数——避免评审被 quota 阻断</li>
+        <li>根据 prompt 识别 SaaS / 电商 / 招聘 / 研究 / 视频等类型，生成对应 React/Vite 项目文件</li>
+        <li>使用 iframe <code>srcDoc</code> 渲染生成结果，让评审可直接操作生成出的应用</li>
+        <li>服务端提供 zip 源码包下载接口，评审可直接下载完整生成项目和 manifest</li>
+        <li>生产环境将生成文件落盘到 <code>/opt/builderos/data/generated-projects/project-&lt;id&gt;/</code></li>
+        <li>Race Mode 作为延展能力：开启后生成多个方案方向和评分，体现多模型竞争思路</li>
+      </ul>
+    </div>
+
+    <!-- Done -->
+    <div class="section" id="done">
+      <h2><span class="sec-num">05</span> 当前完成程度</h2>
+      <h3>已完成</h3>
+      <div class="feature-grid">
+        <div class="feat"><span class="feat-icon">✓</span>首页工作台 + 工作区初始化/注册</div>
+        <div class="feat"><span class="feat-icon">✓</span>MySQL 用户注册、登录、session 恢复、退出</div>
+        <div class="feat"><span class="feat-icon">✓</span>通义千问 / OpenAI 兼容 LLM 网关</div>
+        <div class="feat"><span class="feat-icon">✓</span>token-qiv.cn 中转站 gpt-5.5 路由</div>
+        <div class="feat"><span class="feat-icon">✓</span>模型路由选择器 + 降级策略</div>
+        <div class="feat"><span class="feat-icon">✓</span>Agent 构建进度 + 应用预览</div>
+        <div class="feat"><span class="feat-icon">✓</span>生成 React/Vite 项目文件夹</div>
+        <div class="feat"><span class="feat-icon">✓</span>文件树浏览 + 源码复制 + zip 下载</div>
+        <div class="feat"><span class="feat-icon">✓</span>版本快照 + 真实发布预览链接</div>
+        <div class="feat"><span class="feat-icon">✓</span>GitHub 源码 public 仓库同步</div>
+        <div class="feat"><span class="feat-icon">✓</span>BuilderOS Cloud 资源台</div>
+        <div class="feat"><span class="feat-icon">✓</span>OmniAgent 风格 Agent 链路编排</div>
+        <div class="feat"><span class="feat-icon">✓</span>三栏执行工作台（说明/流程/结果）</div>
+        <div class="feat"><span class="feat-icon">✓</span>编排配置服务端持久化</div>
+        <div class="feat"><span class="feat-icon">✓</span>后端真实 LLM 调用 + Execution Trace</div>
+        <div class="feat"><span class="feat-icon">✓</span>RAG 知识库 + 文件上传解析</div>
+        <div class="feat"><span class="feat-icon">✓</span>简历自动标签 + Agent 编排召回</div>
+        <div class="feat"><span class="feat-icon">✓</span>实时数据页（API/Auth/Build/RAG/Agent）</div>
+      </div>
+      <h3>规划中（时间约束内未展开）</h3>
+      <div class="feature-grid">
+        <div class="feat feat-todo"><span class="feat-icon">○</span>真实代码沙箱执行 + 依赖安装日志</div>
+        <div class="feat feat-todo"><span class="feat-icon">○</span>真实云发布（Vercel / Cloudflare Pages）</div>
+        <div class="feat feat-todo"><span class="feat-icon">○</span>第三方 OAuth + 团队权限</div>
+        <div class="feat feat-todo"><span class="feat-icon">○</span>向量数据库 RAG + embedding + rerank</div>
+        <div class="feat feat-todo"><span class="feat-icon">○</span>PDF/DOCX 解析 + 段落级来源追踪</div>
+        <div class="feat feat-todo"><span class="feat-icon">○</span>拖拽式自由编排 DAG + 分支/重试</div>
+      </div>
+    </div>
+
+    <!-- Verify -->
+    <div class="section" id="verify">
+      <h2><span class="sec-num">06</span> 线上验证状态</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>项目</th><th>状态</th><th>说明</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>公网入口</strong></td><td><span class="status-pill pill-green">在线</span></td><td><code>https://builder.poppcic.cn/</code></td></tr>
+            <tr><td><strong>API 健康</strong></td><td><span class="status-pill pill-green">Healthy</span></td><td><code>/api/status</code> 返回 healthy，存储目录 <code>/opt/builderos/data</code></td></tr>
+            <tr><td><strong>LLM 状态</strong></td><td><span class="status-pill pill-blue">real mode</span></td><td>主路由 qwen-plus；手动切 gpt-5.5 可在 token-qiv.cn 后台验证请求记录</td></tr>
+            <tr><td><strong>持久化</strong></td><td><span class="status-pill pill-green">正常</span></td><td>用户 + session → MySQL；项目/知识库/运行记录 → 服务端数据目录</td></tr>
+            <tr><td><strong>知识 grounding</strong></td><td><span class="status-pill pill-green">可验证</span></td><td>上传文件解析为知识条目，简历自动打标并参与候选人筛选</td></tr>
+            <tr><td><strong>Agent Orchestrator</strong></td><td><span class="status-pill pill-green">可验证</span></td><td>实时数据页显示健康状态；试运行生成真实 Execution Trace</td></tr>
+            <tr><td><strong>GitHub 同步</strong></td><td><span class="status-pill pill-green">完成</span></td><td><a href="https://github.com/heyrry/builderos-atoms-demo" target="_blank" style="color:var(--accent);">heyrry/builderos-atoms-demo</a></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Roadmap -->
+    <div class="section" id="roadmap">
+      <h2><span class="sec-num">07</span> 后续扩展优先级</h2>
+      <div class="priority-list">
+        <div class="priority-item"><span class="priority-num">P1</span><div class="priority-text"><strong>沙箱执行</strong>：接入隔离容器，真实运行 npm install + npm run build + 自动修错循环，让平台从「生成代码」升级为「生成并验证代码」</div></div>
+        <div class="priority-item"><span class="priority-num">P2</span><div class="priority-text"><strong>显式自由编排增强</strong>：把当前串行 Agent 链升级为可拖拽 DAG，补充分支条件、失败重试、人工确认、节点级超时和审计日志</div></div>
+        <div class="priority-item"><span class="priority-num">P3</span><div class="priority-text"><strong>RAG 信息架构升级</strong>：先支持多知识库/每库多资料/构建时选择召回范围，再升级 embeddings + 向量数据库 + rerank，补充 PDF/DOCX 解析</div></div>
+        <div class="priority-item"><span class="priority-num">P4</span><div class="priority-text"><strong>GitHub OAuth + 发布流水线</strong>：平台内一键创建仓库、提交生成文件、打开 PR，再接入 Vercel/Cloudflare Pages API 实现真实部署</div></div>
+        <div class="priority-item"><span class="priority-num">P5</span><div class="priority-text"><strong>计费与积分系统</strong>：模型调用按 provider/model 记录 token + 成本；充值写入 balance ledger，消费扣减；订阅套餐提供团队席位、私有项目和并发构建</div></div>
+        <div class="priority-item"><span class="priority-num">P6</span><div class="priority-text"><strong>多模型调度 + 团队协作</strong>：按任务类型选择「便宜/强/快」模型；增加 workspace 成员、角色权限、版本 diff 和审查记录</div></div>
+      </div>
+    </div>
+
+    <!-- AI Tools -->
+    <div class="section" id="tools">
+      <h2><span class="sec-num">08</span> AI 工具使用情况</h2>
+      <div class="table-wrap">
+        <table>
+          <thead>
+            <tr><th>工具</th><th>用途</th><th>套餐 / 投入</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><strong>Claude Code</strong></td>
+              <td>本项目主力工具，代码生成、架构设计、调试迭代</td>
+              <td><span class="tool-price">$20 / 月</span></td>
+            </tr>
+            <tr>
+              <td><strong>Codex</strong></td>
+              <td>本项目主力工具，代码生成、逻辑实现、功能迭代、部署验证</td>
+              <td><span class="tool-price">PRO 5X × 1（$100）+ TEAM × 2（$60）<br>共 $160 / 月</span></td>
+            </tr>
+            <tr>
+              <td><strong>Qoder</strong><br><small style="color:var(--text3);">阿里巴巴 AI IDE</small></td>
+              <td>AI 编码环境，深度参与日常工作流</td>
+              <td><span class="tool-price">$20 / 月</span></td>
+            </tr>
+            <tr>
+              <td><strong>token-qiv.cn</strong></td>
+              <td>本人运营的 OpenAI 兼容中转服务；BuilderOS Demo 的 <code>gpt-5.5</code> 路由即通过此服务接入，切换模型路由后可在后台验证真实请求记录</td>
+              <td><span class="tool-price" style="color:var(--accent);">自建运营</span></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span>BuilderOS · Atoms Demo · he0yan</span>
+      <span>builder.poppcic.cn</span>
+    </div>
+
+  </main>
+</div>
+</body>
+</html>
